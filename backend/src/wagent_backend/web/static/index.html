@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备台账知识图谱 · GraphRAG</title>
+<script src="/static/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #1a2129; --panel2: #212b36; --line: #2d3a47;
+    --text: #e6edf3; --muted: #8b98a5; --accent: #4f9cf9; --ok: #3fb970; --warn: #f6bd16;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 17px; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  #stats { color: var(--muted); font-size: 13px; }
+  #drill { color: var(--warn); font-size: 12px; }
+  #searchBox {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 200px; outline: none;
+  }
+  #searchBox:focus { border-color: var(--accent); }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { opacity: .9; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  main { flex: 1; display: flex; min-height: 0; }
+  #graphWrap { flex: 1; position: relative; min-width: 0; }
+  #chart { width: 100%; height: 100%; cursor: grab; }
+  /* 节点详情浮层 */
+  #detail {
+    position: absolute; top: 12px; left: 12px; width: 300px; max-height: 70%;
+    overflow: auto; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px; display: none; z-index: 5;
+  }
+  #detail h3 { font-size: 15px; margin-bottom: 2px; }
+  #detail .type { color: var(--accent); font-size: 12px; margin-bottom: 8px; }
+  #detail table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  #detail td { padding: 3px 6px 3px 0; vertical-align: top; border-bottom: 1px dashed var(--line); }
+  #detail td.k { color: var(--muted); white-space: nowrap; width: 76px; }
+  #detail .rels { margin-top: 8px; font-size: 12px; }
+  #detail .rel { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  #detail .rel b { color: var(--warn); font-weight: 500; }
+  #detail .close { position: absolute; top: 8px; right: 8px; border: none; background: none; color: var(--muted); font-size: 15px; }
+  #detail .ops { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  #detail .ops button { padding: 4px 10px; font-size: 12px; }
+  button.danger:hover { border-color: #e8684a; color: #e8684a; }
+  /* 手工编辑面板 */
+  #editPanel {
+    position: absolute; top: 12px; left: 324px; width: 340px; max-height: 78%;
+    overflow: auto; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px; display: none; z-index: 6; font-size: 13px;
+  }
+  #editPanel h3 { font-size: 14px; margin-bottom: 10px; }
+  #editPanel label { display: block; color: var(--muted); font-size: 12px; margin: 8px 0 3px; }
+  #editPanel input, #editPanel select {
+    width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 6px; padding: 6px 8px; font-size: 13px; outline: none;
+  }
+  #editPanel input:focus, #editPanel select:focus { border-color: var(--accent); }
+  #editPanel .attrRow { display: flex; gap: 6px; margin-bottom: 6px; }
+  #editPanel .attrRow .ak { width: 40%; }
+  #editPanel .attrRow button { padding: 4px 8px; font-size: 12px; }
+  #editPanel .dirBtn { width: 100%; margin-top: 4px; color: var(--warn); }
+  #editPanel .actions { display: flex; gap: 8px; margin-top: 12px; }
+  #editPanel .close { position: absolute; top: 8px; right: 8px; border: none; background: none; color: var(--muted); font-size: 15px; }
+  /* 右侧面板 */
+  aside {
+    width: 400px; background: var(--panel); border-left: 1px solid var(--line);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs div {
+    flex: 1; text-align: center; padding: 11px 0; font-size: 14px; cursor: pointer;
+    color: var(--muted); border-bottom: 2px solid transparent;
+  }
+  .tabs div.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .pane { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  .pane.active { display: flex; }
+  /* 聊天 */
+  #msgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 88%; padding: 9px 12px; border-radius: 10px; font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+  .msg.bot { align-self: flex-start; background: var(--panel2); border-bottom-left-radius: 3px; }
+  /* 过场提示（思考/检索/生成）：灰字 + 闪烁光标 */
+  .msg.bot.phase { color: var(--muted); font-size: 12.5px; }
+  .msg.bot.phase::after { content: "▍"; animation: phaseBlink 1s steps(2) infinite; }
+  @keyframes phaseBlink { 50% { opacity: 0; } }
+  .toolchips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+  .chip {
+    font-size: 11px; color: var(--warn); background: #2a2113; border: 1px solid #4d3f1c;
+    padding: 2px 8px; border-radius: 10px; font-family: Consolas, monospace;
+  }
+  #chatForm { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+  #chatInput {
+    flex: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 6px; padding: 8px 10px; font-size: 13.5px; outline: none;
+  }
+  #chatInput:focus { border-color: var(--accent); }
+  /* 发送键在 AI 工作中变为红色终止键 */
+  button.stopping { background: var(--danger) !important; border-color: var(--danger) !important; color: #fff; }
+  /* 抽取 */
+  #extractPane { padding: 14px; gap: 10px; overflow-y: auto; }
+  #extractPane textarea {
+    width: 100%; height: 130px; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 10px; font-size: 13px; resize: vertical; outline: none;
+  }
+  .fileRow { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .fileRow input[type=file] { color: var(--muted); font-size: 12px; flex: 1; }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  #extractResult { font-size: 13px; }
+  #extractResult .grow { color: var(--ok); font-weight: 600; margin-bottom: 8px; }
+  #extractResult ul { list-style: none; }
+  #extractResult li { padding: 3px 0; border-bottom: 1px dashed var(--line); font-size: 12.5px; }
+  #extractResult li.skip { color: var(--muted); }
+  #extractResult li.skip b { color: var(--warn); }
+  /* toast */
+  #toast {
+    position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+    background: #3a2d2d; color: #ffb4b4; border: 1px solid #7a4040; border-radius: 8px;
+    padding: 9px 18px; font-size: 13px; display: none; z-index: 20;
+  }
+  #loading {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(15,20,25,.6); z-index: 10; color: var(--muted); font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>设备台账知识图谱 <span>· GraphRAG</span></h1>
+  <a href="/ops" title="返回 Agent 回放台" style="margin-left:12px;font-size:12px;color:var(--muted);text-decoration:none">↩ 回放台</a>
+  <div id="stats"></div>
+  <div id="drill"></div>
+  <div class="spacer"></div>
+  <input id="searchBox" placeholder="搜索节点：名称 / ID / 别名，回车定位"
+    onkeydown="if(event.key==='Enter')locateNode()">
+  <button onclick="locateNode()">定位</button>
+  <button onclick="collapseAll()">收起全部</button>
+  <button onclick="loadGraph()">刷新图谱</button>
+  <button onclick="resetGraph()">重置为种子</button>
+</header>
+<main>
+  <div id="graphWrap">
+    <div id="chart"></div>
+    <div id="detail"></div>
+    <div id="editPanel"></div>
+    <div id="loading">模型正在抽取三元组并入图…</div>
+  </div>
+  <aside>
+    <div class="tabs">
+      <div class="active" data-pane="chatPane" onclick="switchTab(this)">设备设施智能查询</div>
+      <div data-pane="extractPane" onclick="switchTab(this)">工单抽取（图谱长大）</div>
+    </div>
+    <div class="pane active" id="chatPane">
+      <div id="msgs">
+        <div class="msg bot">你好！我是台账问答助手，可以问我：七氟丙烷驱动气瓶在哪？谁负责它？A座有什么设备？</div>
+      </div>
+      <form id="chatForm" onsubmit="sendChat(event)">
+        <input id="chatInput" placeholder="查询设备设施…如：A栋13楼男卫有哪些设备" autocomplete="off">
+        <button class="primary" type="submit" id="chatBtn">发送</button>
+      </form>
+    </div>
+    <div class="pane" id="extractPane">
+      <div class="hint">贴一段运维工单文本（或上传设备登记表截图），qwen 会现场抽取「设备-人员-空间」三元组合并进图谱 —— 看，图谱自己长大了。</div>
+      <textarea id="woText" placeholder="示例：B座12层1203室租户报修空调不制冷，工程部派技工刘志强上门，检查为风机盘管滤网堵塞，已清洗滤网恢复。"></textarea>
+      <div class="fileRow">
+        <input type="file" id="woImage" accept="image/png,image/jpeg">
+      </div>
+      <button class="primary" id="extractBtn" onclick="doExtract()">抽取并入图</button>
+      <div id="extractResult"></div>
+    </div>
+  </aside>
+</main>
+<div id="toast"></div>
+
+<script>
+const TYPE_COLORS = {
+  "设备": "#5B8FF9", "人员": "#5AD8A6", "部门": "#F6BD16", "供应商": "#E8684A",
+  "项目": "#6DC8EC", "楼栋": "#9270CA", "楼层": "#FF9D4D", "空间": "#269A99",
+};
+// 未捕获的脚本错误也浮出来（空白页无提示是最难排查的状态）
+window.addEventListener("error", (e) => {
+  console.error("[graph-page]", e.error || e);
+  toast("页面脚本错误：" + (e.message || "未知") +
+        (e.lineno ? `（index.html:${e.lineno} 附近，控制台有完整堆栈）` : ""));
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("[graph-page] unhandledrejection:", e.reason);
+  toast("异步错误：" + (e.reason && e.reason.message || e.reason || "未知"));
+});
+let chart = null, highlightIds = new Set(), chatHistory = [];
+let GRAPH_DATA = null, SCHEMA = null;   // 手工编辑用：全量图数据 + 本体规则
+const EDIT = {mode: null, nodeId: null, cur2other: true};  // 编辑面板状态
+// ── 层级展开（drill-down）状态 ──
+const EXPANDED = new Set();   // 已展开容器节点 id（楼层→房间、设施房间→设备）
+let selectedId = null;        // 点击/搜索选中的节点（自渲染选中态，重渲染不丢）
+let POS = {};                 // id -> {x, y, seed?} 已定位节点位置，跨渲染保留防跳动
+let VIEW = null;              // {zoom, center} 当前 roam 视口，跨渲染保留
+let G = null;                 // 图索引：设施层判定 + 父子关系（buildGraphIndex 生成）
+
+// ── 初始化 ──────────────────────────────────────────────
+window.addEventListener("load", () => {
+  if (!window.echarts) {   // 本地化后仍失败（如静态目录未挂载）→ 明示而非空白页
+    toast("图表库 echarts 未加载，请检查 /static/echarts.min.js 是否可访问");
+    return;
+  }
+  chart = echarts.init(document.getElementById("chart"), null, {renderer: "canvas"});
+  window.addEventListener("resize", () => chart.resize());
+  chart.on("click", (p) => {
+    if (p.dataType !== "node") return;
+    const id = p.data.id;
+    if (selectedId && id !== selectedId) {
+      // 选中态：只有亮起的关联节点可继续点；背景（暗）节点不响应——
+      // 先点空白退出选中，再点它们（防止误触跳焦点）
+      const adj = new Set();
+      GRAPH_DATA.edges.forEach(e => {
+        if (e.from === selectedId) adj.add(e.to);
+        if (e.to === selectedId) adj.add(e.from);
+      });
+      if (!adj.has(id)) return;
+    }
+    selectedId = id;
+    showDetail(id);
+    // 可展开的容器节点（楼层/设施房间）：单击同时展开/收起（toggle 内部会重渲染）
+    if (G && (hiddenChildren(id).length || EXPANDED.has(id))) toggleExpand(id);
+    else renderGraph();   // 叶子节点：重渲染应用选中态
+  });
+  // 空白处交互：左键按住拖动画布（抓手光标）；单击空白 = 退出选中/回退（关详情+消隐关联高亮）
+  const zr = chart.getZr();
+  const chartEl = document.getElementById("chart");
+  zr.on("mousedown", (e) => { if (!e.target) chartEl.style.cursor = "grabbing"; });
+  zr.on("mouseup", () => { chartEl.style.cursor = ""; });
+  zr.on("globalout", () => { chartEl.style.cursor = ""; });
+  zr.on("click", (e) => { if (!e.target) closeDetail(); });
+  api("/api/graph/schema").then(s => SCHEMA = s).catch(() => toast("本体规则加载失败"));
+  loadGraph();
+});
+
+async function api(url, opts) {
+  const res = await fetch(url, opts);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || res.statusText);
+  return body;
+}
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.style.display = "block";
+  setTimeout(() => t.style.display = "none", 3500);
+}
+
+// ── 图谱渲染 ────────────────────────────────────────────
+async function loadGraph() {
+  try {
+    const data = await api("/api/graph");
+    GRAPH_DATA = data;
+    buildGraphIndex(data);
+    highlightIds.forEach(expandAncestors);  // 高亮节点若被收起（如新抽取的设施房间/设备），自动展开祖先链
+    document.getElementById("stats").textContent =
+      `节点 ${data.stats.node_count} · 关系 ${data.stats.edge_count}`;
+    renderGraph();
+  } catch (e) { toast("加载图谱失败：" + e.message); }
+}
+
+// 图索引：设施层房间（attrs 带 space_id）、Room→Floor 归属、Device→Room 归属、容器的孩子清单
+function buildGraphIndex(data) {
+  const byId = {};
+  data.nodes.forEach(n => byId[n.id] = n);
+  const facilityRooms = new Set(
+    data.nodes.filter(n => n.type === "Room" && n.attrs && n.attrs.space_id).map(n => n.id));
+  const roomParents = {}, childRooms = {}, deviceRoom = {}, childDevices = {};
+  data.edges.forEach(e => {
+    const s = byId[e.from], t = byId[e.to];
+    if (!s || !t) return;
+    if (e.relation === "part_of" && s.type === "Room") {
+      (roomParents[e.from] = roomParents[e.from] || []).push(e.to);
+      (childRooms[e.to] = childRooms[e.to] || []).push(e.from);
+    }
+    if (e.relation === "located_in" && s.type === "Device" && t.type === "Room") {
+      deviceRoom[e.from] = e.to;
+      (childDevices[e.to] = childDevices[e.to] || []).push(e.from);
+    }
+  });
+  G = {byId, facilityRooms, roomParents, childRooms, deviceRoom, childDevices};
+}
+
+// 可见性：设施层房间随父楼层展开；设施层设备随所在房间展开；其余节点始终可见
+function nodeVisible(n) {
+  if (G.facilityRooms.has(n.id)) {
+    const floors = (G.roomParents[n.id] || []).filter(p => G.byId[p] && G.byId[p].type === "Floor");
+    // 父级不含楼层（如挂在楼栋下的屋面设施间）：无楼层可展开，始终可见
+    return floors.length === 0 || floors.some(f => EXPANDED.has(f));
+  }
+  if (n.type === "Device") {
+    const r = G.deviceRoom[n.id];
+    if (r && G.facilityRooms.has(r)) return EXPANDED.has(r);
+  }
+  return true;
+}
+
+// 收起状态下被隐藏的直系孩子（>0 即节点可展开，角标显示其数量）
+function hiddenChildren(id) {
+  const n = G.byId[id];
+  if (!n) return [];
+  if (n.type === "Floor") return (G.childRooms[id] || []).filter(r => G.facilityRooms.has(r));
+  if (G.facilityRooms.has(id)) return (G.childDevices[id] || []).slice();
+  return [];
+}
+
+function toggleExpand(id) {
+  if (!G || !hiddenChildren(id).length && !EXPANDED.has(id)) return;
+  if (EXPANDED.has(id)) collapseUnder(id);   // 连同后代一起收
+  else { EXPANDED.add(id); seedChildren(id); }
+  renderGraph(id);   // 展开/收起后视口自动移到该节点，不用手动找
+}
+
+function collapseUnder(id) {
+  EXPANDED.delete(id);
+  (G.childRooms[id] || []).forEach(collapseUnder);
+}
+
+// 一键收回所有展开的分支，回到楼层视图
+function collapseAll() {
+  EXPANDED.clear();
+  renderGraph();
+}
+
+// 展开祖先链（楼层→房间）让目标节点可见，供搜索定位/抽取高亮用
+function expandAncestors(id) {
+  if (!G) return;
+  const n = G.byId[id];
+  if (!n) return;
+  if (G.facilityRooms.has(id)) {
+    (G.roomParents[id] || []).forEach(p => { if (G.byId[p] && G.byId[p].type === "Floor") EXPANDED.add(p); });
+  } else if (n.type === "Device") {
+    const r = G.deviceRoom[id];
+    if (r && G.facilityRooms.has(r)) { EXPANDED.add(r); expandAncestors(r); }
+  }
+}
+
+// 新展开的孩子以父节点为圆心散布，作为 force 初始位置（不固定，仍会松弛）
+function seedChildren(id) {
+  const p = POS[id];
+  if (!p) return;
+  const kids = hiddenChildren(id).filter(k => !POS[k]);
+  const radius = Math.max(120, kids.length * 26);   // 孩子多时环半径随之放大，避免堆叠
+  kids.forEach((cid, i) => {
+    const a = (i / kids.length) * Math.PI * 2;
+    POS[cid] = {x: p.x + radius * Math.cos(a), y: p.y + radius * Math.sin(a), seed: true};
+  });
+}
+
+// 重渲染前捕获：roam 视口（zoom/center 由 graphRoam 动作写回 option）+ 各节点当前布局位置
+function captureLayout() {
+  if (!chart) return;
+  const opt = chart.getOption();
+  const s = opt && opt.series && opt.series[0];
+  if (s && s.zoom != null && s.center) VIEW = {zoom: s.zoom, center: s.center};
+  const gm = chart.getModel && chart.getModel();
+  const sm = gm && gm.getSeriesByIndex(0);
+  if (!sm) return;
+  const sd = sm.getData();
+  sd.each(idx => {
+    const l = sd.getItemLayout(idx);
+    if (l && !isNaN(l[0]) && !isNaN(l[1])) POS[sd.getId(idx)] = {x: l[0], y: l[1]};
+  });
+}
+
+function renderGraph(focusId) {
+  if (!GRAPH_DATA || !G) return;
+  captureLayout();
+  const data = GRAPH_DATA;
+  const categories = data.categories.map(c => ({name: c.name}));
+  const catName = data.categories.map(c => c.name);
+  const visNodes = data.nodes.filter(nodeVisible);
+  const vids = new Set(visNodes.map(n => n.id));
+  // 选中态（点击/搜索定位）：选中节点金框 + 邻接节点亮起 + 邻接边高亮，其余淡去。
+  // 自渲染实现（不吃 ECharts hover emphasis——重渲染后悬停态会丢，点击选中不能丢）
+  const selOn = selectedId && vids.has(selectedId);
+  const selAdj = new Set();
+  if (selOn) data.edges.forEach(e => {
+    if (e.from === selectedId) selAdj.add(e.to);
+    if (e.to === selectedId) selAdj.add(e.from);
+  });
+  // 节点尺寸按层级递减：项目 > 楼栋 > 楼层 > 空间/组织 > 设备
+  // （楼层及以下的设备设施/供应商等关联节点统一收约 30%，防收起态下楼层圈过大）
+  const SIZE = {Project: 64, Building: 52, Floor: 29, Room: 21,
+                Department: 21, Vendor: 21, Person: 19, Device: 13};
+  const nodes = visNodes.map(n => {
+    const node = {
+      id: n.id, name: n.name, category: categoryIndex(data, n.category),
+      symbolSize: SIZE[n.type] || 30,
+      itemStyle: {},
+      attrs: n.attrs, type: n.type, aliases: n.aliases,
+    };
+    if (highlightIds.has(n.id)) {
+      node.itemStyle = {borderColor: "#FFD666", borderWidth: 3, shadowBlur: 12, shadowColor: "#FFD666"};
+    }
+    if (selOn) {
+      if (n.id === selectedId) {
+        node.itemStyle = {borderColor: "#FFD666", borderWidth: 3, shadowBlur: 14, shadowColor: "#FFD666"};
+      } else if (selAdj.has(n.id)) {
+        node.itemStyle = {borderColor: "#f6bd16", borderWidth: 2};   // 关联节点亮起
+      } else {
+        node.itemStyle = {opacity: 0.35};
+        node.label = {color: "rgba(230,237,243,0.35)"};
+        node.silent = true;   // 背景节点彻底不响应悬停/点击（无轮廓、无事件）
+      }
+    }
+    const kids = hiddenChildren(n.id);
+    if (kids.length) node.badge = EXPANDED.has(n.id) ? "▾" : `▸${kids.length}`;
+    const pos = POS[n.id];
+    if (pos) { node.x = pos.x; node.y = pos.y; }   // 从上次位置继续松弛（不钉死，保持动态）
+    return node;
+  });
+  const edges = data.edges
+    .filter(e => vids.has(e.from) && vids.has(e.to))   // 边只在两端点都可见时渲染
+    .map(e => {
+      const adjacent = selOn && (e.from === selectedId || e.to === selectedId);
+      return {
+        source: e.from, target: e.to, value: e.label,
+        lineStyle: adjacent
+          ? {color: "#f6bd16", width: 2.5, curveness: 0.12}          // 选中节点的关系线高亮
+          : {color: "#3d4a58", width: 1.4, curveness: 0.12,
+             opacity: selOn ? 0.15 : 1},
+      };
+    });
+  const series = {
+    type: "graph", layout: "force", roam: true, draggable: true,
+    categories, nodes, links: edges,
+    label: {
+      show: true, color: "#e6edf3", fontSize: 11, position: "bottom",
+      formatter: (p) => p.data.badge ? `${p.data.name} {bdg|${p.data.badge}}` : `${p.data.name}`,
+      rich: {bdg: {color: "#f6bd16", fontSize: 11, fontWeight: 600}},
+    },
+    edgeLabel: {show: true, formatter: (p) => p.data.value, fontSize: 9, color: "#7d8a97"},
+    edgeSymbol: ["none", "arrow"], edgeSymbolSize: 7,
+    // 选中节点：关联节点亮起（邻接强调），其余仅轻微变暗（不再几乎全黑）
+    emphasis: {focus: "adjacency", lineStyle: {width: 3, color: "#f6bd16"},
+               itemStyle: {borderColor: "#f6bd16", borderWidth: 2.5}},
+    blur: {itemStyle: {opacity: 0.4}, lineStyle: {opacity: 0.18}, label: {opacity: 0.3}},
+    // 力导向动画常开：保持进入页面时的动态观感（位置经 POS 跨渲染延续，不跳变）
+    force: {repulsion: 320, edgeLength: [90, 150], gravity: 0.08},
+  };
+  if (VIEW) { series.zoom = VIEW.zoom; series.center = VIEW.center; }
+  chart.setOption({
+    backgroundColor: "transparent",
+    animationDurationUpdate: 450,          // 展开/收起的过渡动画，避免生硬跳变
+    animationEasingUpdate: "cubicOut",
+    tooltip: {
+      formatter: (p) => p.dataType === "edge"
+        ? p.data.value
+        : `<b>${p.data.name}</b><br>${p.data.type}${p.data.aliases?.length ? " · " + p.data.aliases.join("/") : ""}`,
+    },
+    legend: [{data: catName, textStyle: {color: "#8b98a5", fontSize: 11}, top: 8, left: 8}],
+    series: [series],
+  }, true);
+  document.getElementById("drill").textContent =
+    `已展开 ${EXPANDED.size} 个节点 · 显示 ${vids.size}/${data.nodes.length} 节点 · 单击楼层/房间展开或收起`;
+}
+
+// 搜索定位：名称/ID/别名匹配，点亮全部命中节点。
+// 少量命中（≤12）：展开祖先链并逐个点亮；大量命中（如「马桶」216 个）不展开——
+// 全部展开会让 800+ 节点同时进力导向动画直接卡死，改为点亮命中所属的可见锚点
+// （楼层/空间），用户点击下钻。
+// 注意：不做程序化平移居中——graphRoam 动作与 setOption(notMerge) 的视口恢复
+// 存在坐标系错位（实测命中测试漂移），定位交给高亮 + 用户自己拖画布。
+function locateNode() {
+  const kw = document.getElementById("searchBox").value.trim().toLowerCase();
+  if (!kw || !GRAPH_DATA) return;
+  const exact = n => n.id.toLowerCase() === kw || n.name.toLowerCase() === kw;
+  const fuzzy = n => n.id.toLowerCase().includes(kw) || n.name.toLowerCase().includes(kw)
+    || (n.aliases || []).some(a => a.toLowerCase().includes(kw));
+  let hits = GRAPH_DATA.nodes.filter(exact);
+  if (!hits.length) hits = GRAPH_DATA.nodes.filter(fuzzy);
+  if (!hits.length) { toast("未找到匹配节点"); return; }
+  highlightIds.clear();          // 新一轮搜索，清掉旧高亮
+  if (hits.length <= 12) {
+    hits.forEach(n => { highlightIds.add(n.id); expandAncestors(n.id); });
+    selectedId = hits[0].id;
+    renderGraph(hits[0].id);
+    showDetail(hits[0].id);
+    toast(`命中 ${hits.length} 个节点，已全部点亮`);
+  } else {
+    hits.forEach(n => highlightIds.add(visibleAnchor(n.id)));
+    selectedId = null;
+    renderGraph();
+    toast(`命中 ${hits.length} 个节点，已点亮其所在楼层/空间（点击可逐层下钻）`);
+  }
+}
+
+// 命中的可见锚点：节点本身可见→自己；被收起→沿 设备→房间→楼层 向上找最近可见祖先
+function visibleAnchor(id) {
+  let cur = id;
+  const seen = new Set();
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    const n = G.byId[cur];
+    if (!n) return id;
+    if (nodeVisible(n)) return cur;
+    cur = G.deviceRoom[cur] || (G.roomParents[cur] || [])[0];
+  }
+  return id;
+}
+
+// 注：曾经的 centerOnNode（程序化平移居中）已移除——graphRoam 动作与
+// setOption(notMerge) 的视口恢复叠加后命中测试会漂移（CDP 实测），
+// 展开定位改由「选中态高亮 + 视口保持」承担，平移完全交给用户拖拽。
+function categoryIndex(data, label) { return data.categories.findIndex(c => c.name === label); }
+
+async function resetGraph() {
+  if (!confirm("重置将清空抽取新增的内容，恢复到登记表种子图谱。确定？")) return;
+  try {
+    await api("/api/graph/reset", {method: "POST"});
+    highlightIds.clear();
+    loadGraph();
+    toast("已重置为种子图谱");
+  } catch (e) { toast(e.message); }
+}
+
+// ── 节点详情 ────────────────────────────────────────────
+// 关闭详情 = 同时退出节点的选中/高亮状态（消隐自渲染选中态 + hover 强调）
+function closeDetail() {
+  document.getElementById("detail").style.display = "none";
+  selectedId = null;
+  if (chart) chart.dispatchAction({type: "downplay", seriesIndex: 0});
+  renderGraph();
+}
+
+async function showDetail(id) {
+  const el = document.getElementById("detail");
+  try {
+    const d = await api(`/api/graph/entity/${encodeURIComponent(id)}`);
+    const rows = Object.entries(d.entity.attrs || {})
+      .map(([k, v]) => `<tr><td class="k">${k}</td><td>${v}</td></tr>`).join("");
+    const rels = d.edges.map(e => {
+      const arrow = e.direction === "out" ? `—<b>${e.relation_label}</b>→` : `←<b>${e.relation_label}</b>—`;
+      return `<div class="rel">${arrow} ${e.other.name} <span style="color:var(--muted)">(${e.other.type_label})</span></div>`;
+    }).join("");
+    el.innerHTML = `<button class="close" onclick="closeDetail()">✕</button>
+      <h3>${d.entity.name}</h3>
+      <div class="type">${d.entity.type_label} · ${d.entity.entity_id}</div>
+      ${d.entity.entity_type === "Device" ? `<div style="margin-bottom:8px;font-size:12px"><a href="/asset/${encodeURIComponent(d.entity.entity_id)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">维修页 ↗</a></div>` : ""}
+      <table>${rows || '<tr><td class="k">（无属性）</td></tr>'}</table>
+      <div class="rels">${rels || '<div class="rel">（无关系）</div>'}</div>
+      <div class="ops">
+        <button onclick="openEdit('${id}')">编辑</button>
+        <button onclick="openNewFrom('${id}')">从此新增</button>
+        <button onclick="openLink('${id}')">关联已有</button>
+        <button class="danger" onclick="delEntity('${id}')">删除</button>
+      </div>`;
+    el.style.display = "block";
+    el.dataset.eid = id;
+    const spaceId = (d.entity.attrs || {}).space_id;
+    if (spaceId) loadEntityWorkorders(id);   // 节点带 space_id 才探测关联工单
+  } catch (e) { toast(e.message); }
+}
+
+// 关联工单：节点 attrs.space_id → ops 工单列表（只读桥接端点）
+async function loadEntityWorkorders(id) {
+  try {
+    const r = await api(`/api/graph/entity/${encodeURIComponent(id)}/workorders`);
+    const el = document.getElementById("detail");
+    if (el.dataset.eid !== id || el.style.display === "none") return;  // 面板已切换/关闭则丢弃
+    const items = r.workorders.map(w =>
+      `<div class="rel"><b>${escapeHtml(w.wo_id)}</b> <span style="color:var(--muted)">${escapeHtml(w.created_at || "")}</span><br>${escapeHtml(w.raw_text || "")}</div>`
+    ).join("");
+    const sec = document.createElement("div");
+    sec.className = "rels";
+    sec.innerHTML = `<div style="color:var(--muted);margin-bottom:2px">关联工单（${escapeHtml(r.space_id)}）</div>`
+      + (items || `<div class="rel">（暂无工单）</div>`);
+    el.querySelector(".ops").before(sec);
+  } catch (e) { /* 桥接失败静默，不影响详情面板 */ }
+}
+
+// ── 手工编辑（图谱页） ──────────────────────────────────
+function nodeOf(id) { return GRAPH_DATA.nodes.find(n => n.id === id); }
+
+function closeEdit() {
+  document.getElementById("editPanel").style.display = "none";
+  EDIT.mode = null;
+}
+
+function attrRowHtml(k = "", v = "") {
+  return `<div class="attrRow">
+    <input class="ak" placeholder="属性名" value="${escapeHtml(k)}">
+    <input class="av" placeholder="属性值" value="${escapeHtml(v)}">
+    <button type="button" onclick="this.parentElement.remove()">删</button>
+  </div>`;
+}
+
+function collectAttrs() {
+  const attrs = {};
+  document.querySelectorAll("#epAttrs .attrRow").forEach(r => {
+    const k = r.querySelector(".ak").value.trim();
+    if (k) attrs[k] = r.querySelector(".av").value;
+  });
+  return attrs;
+}
+
+// 按两端类型+方向过滤出合法关系选项
+function fillRelSelect(sel, srcType, dstType) {
+  const opts = Object.entries(SCHEMA.relation_types)
+    .filter(([, r]) => r.subject.split("|").includes(srcType) && r.object.split("|").includes(dstType));
+  sel.innerHTML = opts.length
+    ? opts.map(([k, r]) => `<option value="${k}">${r.label}（${k}）</option>`).join("")
+    : `<option value="">（这两类节点在此方向下无可用关系）</option>`;
+}
+
+function dirLabel(mode, cur2other) {
+  return mode === "newFrom"
+    ? (cur2other ? "当前节点 → 新节点" : "新节点 → 当前节点")
+    : (cur2other ? "当前节点 → 目标节点" : "目标节点 → 当前节点");
+}
+
+function toggleDir() {
+  EDIT.cur2other = !EDIT.cur2other;
+  document.getElementById("epDir").textContent = "方向：" + dirLabel(EDIT.mode, EDIT.cur2other);
+  refreshRelOptions();
+}
+
+// 方向/对端变化后重算关系下拉
+function refreshRelOptions() {
+  const curType = nodeOf(EDIT.nodeId).type;
+  let srcType, dstType;
+  if (EDIT.mode === "newFrom") {
+    const newType = document.getElementById("epNewType").value;
+    [srcType, dstType] = EDIT.cur2other ? [curType, newType] : [newType, curType];
+  } else {
+    const tgt = nodeOf(document.getElementById("epTarget").value);
+    if (!tgt) return;
+    [srcType, dstType] = EDIT.cur2other ? [curType, tgt.type] : [tgt.type, curType];
+  }
+  fillRelSelect(document.getElementById("epRel"), srcType, dstType);
+}
+
+function openPanel(title, bodyHtml) {
+  const el = document.getElementById("editPanel");
+  el.innerHTML = `<button class="close" onclick="closeEdit()">✕</button><h3>${title}</h3>${bodyHtml}`;
+  el.style.display = "block";
+}
+
+// —— 编辑节点（名称+属性，类型不可改） ——
+function openEdit(id) {
+  const n = nodeOf(id);
+  EDIT.mode = "edit"; EDIT.nodeId = id;
+  const rows = Object.entries(n.attrs || {}).map(([k, v]) => attrRowHtml(k, v)).join("");
+  openPanel(`编辑节点 · ${escapeHtml(n.name)}`, `
+    <label>类型（不可修改）</label><input value="${n.type}" disabled>
+    <label>名称</label><input id="epName" value="${escapeHtml(n.name)}">
+    <label>属性（值留空即删除该属性）</label>
+    <div id="epAttrs">${rows}</div>
+    <button onclick="document.getElementById('epAttrs').insertAdjacentHTML('beforeend', attrRowHtml())">＋ 添加属性</button>
+    <div class="actions">
+      <button class="primary" onclick="submitEdit()">保存修改</button>
+      <button onclick="closeEdit()">取消</button>
+    </div>`);
+}
+
+async function submitEdit() {
+  const id = EDIT.nodeId;
+  const name = document.getElementById("epName").value.trim();
+  if (!name) { toast("名称不能为空"); return; }
+  const attrs = collectAttrs();
+  // 原有属性中被移除的键 → 空字符串提交，后端按约定删除
+  Object.keys(nodeOf(id).attrs || {}).forEach(k => { if (!(k in attrs)) attrs[k] = ""; });
+  if (!confirm(`确认保存对「${name}」的修改？`)) return;
+  try {
+    await api(`/api/graph/entity/${encodeURIComponent(id)}`, {
+      method: "PATCH", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({name, attrs}),
+    });
+    closeEdit(); await loadGraph(); showDetail(id);
+    toast("已保存");
+  } catch (e) { toast(e.message); }
+}
+
+// —— 删除节点（二次确认，文案含连带边数） ——
+async function delEntity(id) {
+  const n = nodeOf(id);
+  const cnt = GRAPH_DATA.edges.filter(e => e.from === id || e.to === id).length;
+  if (!confirm(`确认删除节点「${n.name}」？\n将连带删除 ${cnt} 条关系，此操作不可恢复。`)) return;
+  try {
+    const r = await api(`/api/graph/entity/${encodeURIComponent(id)}`, {method: "DELETE"});
+    closeEdit();
+    document.getElementById("detail").style.display = "none";
+    await loadGraph();
+    toast(`已删除「${r.deleted.name}」及 ${r.edge_count} 条关系`);
+  } catch (e) { toast(e.message); }
+}
+
+// —— 从此节点新增节点 + 关系 ——
+function openNewFrom(id) {
+  EDIT.mode = "newFrom"; EDIT.nodeId = id; EDIT.cur2other = true;
+  const typeOpts = Object.entries(SCHEMA.node_types)
+    .map(([k, v]) => `<option value="${k}">${v.label}（${k}）</option>`).join("");
+  openPanel(`从「${escapeHtml(nodeOf(id).name)}」新增`, `
+    <label>新节点类型</label><select id="epNewType" onchange="refreshRelOptions()">${typeOpts}</select>
+    <label>新节点名称</label><input id="epName" placeholder="必填">
+    <label>新节点属性（可选）</label>
+    <div id="epAttrs"></div>
+    <button onclick="document.getElementById('epAttrs').insertAdjacentHTML('beforeend', attrRowHtml())">＋ 添加属性</button>
+    <label>关系（必选）</label>
+    <button class="dirBtn" id="epDir" onclick="toggleDir()"></button>
+    <select id="epRel"></select>
+    <div class="actions">
+      <button class="primary" onclick="submitNew()">创建</button>
+      <button onclick="closeEdit()">取消</button>
+    </div>`);
+  document.getElementById("epDir").textContent = "方向：" + dirLabel("newFrom", true);
+  refreshRelOptions();
+}
+
+async function submitNew() {
+  const id = EDIT.nodeId;
+  const type = document.getElementById("epNewType").value;
+  const name = document.getElementById("epName").value.trim();
+  const relation = document.getElementById("epRel").value;
+  if (!name) { toast("新节点名称不能为空"); return; }
+  if (!relation) { toast("这两类节点在此方向下无可用关系，请换类型或方向"); return; }
+  try {
+    const r = await api("/api/graph/entity", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        type, name, attrs: collectAttrs(),
+        // UI 的「当前节点→新节点」= 目标→新节点，即 API 的 direction=in
+        link: {target_id: id, relation, direction: EDIT.cur2other ? "in" : "out"},
+      }),
+    });
+    highlightIds.add(r.entity.entity_id);
+    closeEdit(); await loadGraph(); showDetail(id);
+    toast(`已创建「${r.entity.name}」并建立关系`);
+  } catch (e) { toast(e.message); }
+}
+
+// —— 关联已有节点 ——
+function openLink(id) {
+  EDIT.mode = "link"; EDIT.nodeId = id; EDIT.cur2other = true;
+  openPanel(`关联「${escapeHtml(nodeOf(id).name)}」到已有节点`, `
+    <label>搜索目标节点</label>
+    <input id="epFilter" placeholder="按名称/ID 过滤" oninput="fillTargets()">
+    <label>目标节点</label><select id="epTarget" onchange="refreshRelOptions()"></select>
+    <label>关系（必选）</label>
+    <button class="dirBtn" id="epDir" onclick="toggleDir()"></button>
+    <select id="epRel"></select>
+    <div class="actions">
+      <button class="primary" onclick="submitLink()">建立关系</button>
+      <button onclick="closeEdit()">取消</button>
+    </div>`);
+  fillTargets();
+  document.getElementById("epDir").textContent = "方向：" + dirLabel("link", true);
+}
+
+function fillTargets() {
+  const kw = document.getElementById("epFilter").value.trim().toLowerCase();
+  const sel = document.getElementById("epTarget");
+  const list = GRAPH_DATA.nodes.filter(n => n.id !== EDIT.nodeId
+    && (!kw || n.name.toLowerCase().includes(kw) || n.id.toLowerCase().includes(kw)));
+  sel.innerHTML = list.map(n => `<option value="${n.id}">${n.name}（${n.category}）</option>`).join("")
+    || `<option value="">（无匹配节点）</option>`;
+  refreshRelOptions();
+}
+
+async function submitLink() {
+  const id = EDIT.nodeId;
+  const target = document.getElementById("epTarget").value;
+  const relation = document.getElementById("epRel").value;
+  if (!target) { toast("请选择目标节点"); return; }
+  if (!relation) { toast("这两类节点在此方向下无可用关系，请换方向"); return; }
+  const [src, dst] = EDIT.cur2other ? [id, target] : [target, id];
+  try {
+    await api("/api/graph/relation", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({src, dst, relation}),
+    });
+    closeEdit(); await loadGraph(); showDetail(id);
+    toast("关系已建立");
+  } catch (e) { toast(e.message); }
+}
+
+// ── 聊天 ────────────────────────────────────────────────
+function switchTab(el) {
+  document.querySelectorAll(".tabs div").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".pane").forEach(p => p.classList.remove("active"));
+  el.classList.add("active");
+  document.getElementById(el.dataset.pane).classList.add("active");
+}
+
+let chatAbort = null;   // 进行中的聊天请求（终止键 abort 用）
+
+async function sendChat(ev) {
+  ev.preventDefault();
+  if (chatAbort) { chatAbort.abort(); return; }   // 工作中点击发送键 = 终止
+  const input = document.getElementById("chatInput");
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = "";
+  const msgs = document.getElementById("msgs");
+  msgs.insertAdjacentHTML("beforeend", `<div class="msg user">${escapeHtml(q)}</div>`);
+  const btn = document.getElementById("chatBtn");
+  btn.textContent = "■"; btn.classList.add("stopping");   // 终止键
+  chatAbort = new AbortController();
+  // 过场提示（阶段文案仅过渡用，后端是一次返回；工具调用过程不展示）
+  const bubble = document.createElement("div");
+  bubble.className = "msg bot phase";
+  msgs.appendChild(bubble);
+  msgs.scrollTop = msgs.scrollHeight;
+  const phases = ["🤔 正在理解问题…", "🔍 正在检索图谱…", "✍️ 正在生成回答…"];
+  let pi = 0;
+  bubble.textContent = phases[0];
+  const timer = setInterval(() => {
+    pi = Math.min(pi + 1, phases.length - 1);
+    bubble.textContent = phases[pi];
+  }, 1800);
+  try {
+    const r = await api("/api/chat", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({message: q, history: chatHistory}),
+      signal: chatAbort.signal,
+    });
+    clearInterval(timer);
+    bubble.classList.remove("phase");
+    typewriter(bubble, r.reply);   // 流式（打字机）输出回答
+    chatHistory.push({role: "user", content: q}, {role: "assistant", content: r.reply});
+    chatHistory = chatHistory.slice(-6);
+  } catch (e) {
+    clearInterval(timer);
+    bubble.classList.remove("phase");
+    bubble.textContent = (e.name === "AbortError") ? "⏹ 已手动终止生成" : "⚠️ " + e.message;
+  }
+  chatAbort = null;
+  btn.textContent = "发送"; btn.classList.remove("stopping");
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// 打字机式流式渲染（后端一次返回全文，前端逐字出场）
+function typewriter(el, text) {
+  const msgs = document.getElementById("msgs");
+  let i = 0;
+  const tick = () => {
+    i += 2 + Math.floor(Math.random() * 2);
+    el.textContent = text.slice(0, i);
+    msgs.scrollTop = msgs.scrollHeight;
+    if (i < text.length) setTimeout(tick, 24);
+  };
+  tick();
+}
+
+// ── 工单抽取（图谱长大） ────────────────────────────────
+async function doExtract() {
+  const text = document.getElementById("woText").value.trim();
+  const fileInput = document.getElementById("woImage");
+  const file = fileInput.files[0];
+  if (!text && !file) { toast("贴一段工单文本或选一张截图"); return; }
+  const fd = new FormData();
+  if (text) fd.append("text", text);
+  if (file) fd.append("image", file);
+  const btn = document.getElementById("extractBtn");
+  const loading = document.getElementById("loading");
+  btn.disabled = true; loading.style.display = "flex";
+  try {
+    const r = await api("/api/extract", {method: "POST", body: fd});
+    renderExtractResult(r);
+    highlightIds = new Set(r.added_nodes.map(n => n.entity_id));
+    loadGraph();
+  } catch (e) {
+    toast("抽取失败：" + e.message);
+  }
+  btn.disabled = false; loading.style.display = "none";
+}
+
+function renderExtractResult(r) {
+  const el = document.getElementById("extractResult");
+  if (!r.grown) {
+    el.innerHTML = `<div class="grow">图谱没有变化</div>
+      <div class="hint">${r.skipped.map(s => `⚠️ ${escapeHtml(s.reason)}`).join("<br>") || "这段文本里没有可抽取的三元组"}</div>`;
+    return;
+  }
+  const nodes = r.added_nodes.map(n =>
+    `<li>＋节点 <b style="color:${TYPE_COLORS[n.type_label] || "#fff"}">${n.name}</b>（${n.type_label}）</li>`).join("");
+  const edges = r.added_edges.map(e => `<li>＋关系 <b>${e.label}</b></li>`).join("");
+  const skipped = r.skipped.map(s => `<li class="skip">跳过：<b>${escapeHtml(s.reason)}</b></li>`).join("");
+  el.innerHTML = `<div class="grow">🌱 图谱长大了：+${r.added_nodes.length} 节点 · +${r.added_edges.length} 关系</div>
+    <ul>${nodes}${edges}${skipped}</ul>`;
+}
+
+// ── 工具 ────────────────────────────────────────────────
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function short(s) { return s && s.length > 26 ? s.slice(0, 26) + "…" : (s || ""); }
+</script>
+</body>
+</html>

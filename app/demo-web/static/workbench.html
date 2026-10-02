@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>工作台 · OctoSense Repair</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="topbar"></div>
+  <main>
+    <div class="workbench-grid">
+      <!-- 左：任务列表 + 新建表单 -->
+      <div>
+        <section class="card" id="new-card" style="display:none;">
+          <h2>新建报修（仅 REPORTER）</h2>
+          <form id="new-form" class="new-form" onsubmit="return createDraft(event)">
+            <div class="field">
+              <label>项目</label>
+              <select name="project_id">
+                <option value="prj-A">项目 A · 项目A</option>
+                <option value="prj-B">项目 B · 项目B</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>问题原话（保留完整描述）</label>
+              <textarea name="problem_text" required placeholder="例：茶水间微波炉不加热，按键无响应"></textarea>
+            </div>
+            <div class="field">
+              <label>联系人</label>
+              <input name="contact_name" required placeholder="例：张三">
+            </div>
+            <div class="field">
+              <label>联系电话（可选）</label>
+              <input name="contact_info" placeholder="例：13800001111">
+            </div>
+            <div class="field">
+              <label>期望时间窗（可选）</label>
+              <input name="preferred_window" placeholder="例：明天下午 14:00-16:00">
+            </div>
+            <input type="hidden" name="idempotency_key" />
+            <div class="form-actions">
+              <button type="submit">提交草稿</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2 id="task-list-title">我的任务</h2>
+          <div id="task-list" class="task-list">
+            <div class="empty">加载中…</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 右：任务详情 -->
+      <div>
+        <section class="card task-detail" id="detail">
+          <div class="empty">← 在左侧选一条任务查看详情与可执行动作</div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+  <script>
+    const me = OctoApp.getActor();
+    if (!me) { location.href = '/'; }
+    OctoApp.renderTopbar();
+
+    // 修复 R-P1-2：多项目数组
+    const myProjects = OctoApp.projectListOf(me);
+
+    if (me.role === 'REPORTER') {
+      document.getElementById('new-card').style.display = '';
+      const sel = document.querySelector('#new-form select[name=project_id]');
+      // 限定为该报修人能写的项目
+      Array.from(sel.options).forEach(o => {
+        if (!myProjects.includes(o.value)) o.remove();
+      });
+      document.querySelector('#new-form [name=idempotency_key]').value = OctoApp.newIdem();
+    }
+
+    // 修复 R-P1-6：从 ACTIVE 任务对象读版本，未选中禁用动作
+    const ACTIVE = { taskId: null, task: null, version: 0 };
+
+    function currentVer() {
+      return ACTIVE.version || 0;
+    }
+    function setActive(t) {
+      ACTIVE.taskId = t ? t.task_id : null;
+      ACTIVE.task = t;
+      ACTIVE.version = t ? t.version : 0;
+    }
+
+    // 修复 R-P1-5 / R-P1-2：项目数组 + URLSearchParams
+    async function loadList() {
+      const list = document.getElementById('task-list');
+      const title = document.getElementById('task-list-title');
+      try {
+        const allResults = [];
+        for (const p of myProjects) {
+          const data = await OctoApp.api(`/api/octosense/v1/tasks?project_id=${encodeURIComponent(p)}&limit=50`);
+          (data.tasks || []).forEach(t => allResults.push(t));
+        }
+        // 去重（同一 task 可能来自多项目，仅作防御）
+        const seen = new Set();
+        const tasks = allResults.filter(t => {
+          if (seen.has(t.task_id)) return false;
+          seen.add(t.task_id);
+          return true;
+        }).sort((a, b) => (b.updated_at_ms || 0) - (a.updated_at_ms || 0));
+        title.textContent = `我的任务（${myProjects.join(' · ')}）`;
+        if (!tasks.length) {
+          list.innerHTML = `<div class="empty">${me.role === 'REPORTER' ? '点击上方「新建报修」创建第一条任务' : '暂无任务'}</div>`;
+          return;
+        }
+        list.innerHTML = tasks.map(t => `
+          <div class="task-card ${ACTIVE.taskId === t.task_id ? 'active' : ''}" data-id="${t.task_id}" onclick="openTask('${t.task_id}')">
+            <div class="row1">
+              <span class="id">${t.task_id.slice(0,8)}…</span>
+              <span class="status-chip status-${t.status}">${t.status}</span>
+            </div>
+            <div class="problem">${OctoApp.escapeHtml(t.problem_text || '(无描述)')}</div>
+            <div class="meta">
+              <span>v${t.version}</span>
+              ${t.assignee_id ? `<span>by ${OctoApp.escapeHtml(t.assignee_id)}</span>` : ''}
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        list.innerHTML = `<div class="empty">加载失败：${OctoApp.escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function openTask(taskId) {
+      const box = document.getElementById('detail');
+      box.innerHTML = '<div class="empty">加载中…</div>';
+      try {
+        const data = await OctoApp.api(`/api/octosense/v1/tasks/${taskId}`);
+        setActive(data.task);
+        renderDetail(data);
+      } catch (e) {
+        setActive(null);
+        box.innerHTML = `<div class="empty">加载失败：${OctoApp.escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderDetail(data) {
+      const t = data.task;
+      const appts = data.appointments || [];
+      const evidence = data.evidence || [];
+      const events = data.events || [];
+      const pins = data.pins || [];
+      const completions = data.completions || [];
+      // 修复 N11：分开 proposedAppt / confirmedAppt
+      const proposedAppt = appts.find(a => a.status === 'PROPOSED');
+      const confirmedAppt = appts.find(a => a.status === 'CONFIRMED');
+      const readyEvidence = evidence.filter(e => e.status === 'READY');
+
+      const box = document.getElementById('detail');
+
+      // 同步 ACTIVE
+      ACTIVE.taskId = t.task_id;
+      ACTIVE.task = t;
+      ACTIVE.version = t.version;
+
+      // 顶部任务概览
+      let html = `
+        <h2>任务详情 <span class="status-chip status-${t.status}">${t.status}</span></h2>
+        <div class="row"><div class="label">任务 ID</div><div style="font-family:ui-monospace,monospace;">${t.task_id}</div></div>
+        <div class="row"><div class="label">版本</div><div>v${t.version}</div></div>
+        <div class="row"><div class="label">报修人</div><div>${OctoApp.escapeHtml(t.reporter_id)}</div></div>
+        <div class="row"><div class="label">承接人</div><div>${OctoApp.escapeHtml(t.assignee_id || '—')}</div></div>
+        <div class="row"><div class="label">设备</div><div>${OctoApp.escapeHtml(t.asset_id || '—')}</div></div>
+        <div class="row"><div class="label">问题原话</div><div>${OctoApp.escapeHtml(t.problem_text || '')}</div></div>
+        <div class="row"><div class="label">联系人</div><div>${OctoApp.escapeHtml(t.contact_name || '')}${t.contact_info ? ' / ' + OctoApp.escapeHtml(t.contact_info) : ''}</div></div>
+      `;
+
+      // 角色相关动作
+      html += `<h2 style="margin-top:18px;">${OctoApp.roleChip(me.role)} ${OctoApp.escapeHtml(me.name)} 可执行的动作</h2>`;
+      html += renderActions(t, appts, evidence, {proposedAppt, confirmedAppt, readyEvidence});
+
+      // 完工轮次
+      if (completions.length) {
+        html += `<h2 style="margin-top:18px;">完工轮次（${completions.length}）</h2>`;
+        for (const c of completions) {
+          html += `<div class="row"><div class="label">第 ${c.round} 轮 · ${OctoApp.fmtTime(c.created_at_ms)}</div>
+            <div>${OctoApp.escapeHtml(c.completion_text)} · <b>${c.disposition || 'REPAIRED'}</b><br>
+            <span style="font-family:ui-monospace,monospace;font-size:11px;">${OctoApp.escapeHtml(c.completion_id)}</span></div></div>`;
+        }
+      }
+
+      // 证据
+      if (evidence.length) {
+        html += `<h2 style="margin-top:18px;">证据附件（${evidence.length}）</h2><div class="evidence-grid">`;
+        for (const e of evidence) {
+          const isQuar = e.status === 'QUARANTINED';
+          html += `
+            <div class="evidence-card ${isQuar ? 'status-QUARANTINED' : ''}">
+              <div class="file">${OctoApp.escapeHtml(e.filename)}</div>
+              <div class="meta">
+                ${OctoApp.fmtBytes(e.byte_size)} · sha256:${e.sha256.slice(0,12)}…<br>
+                上传人：${OctoApp.escapeHtml(e.uploader_id)} · ${OctoApp.fmtTime(e.created_at_ms)}<br>
+                状态：<b>${e.status}</b>${isQuar ? '<div class="quarantined-tag">已隔离（不计入完工）</div>' : ''}
+              </div>
+            </div>`;
+        }
+        html += '</div>';
+      }
+
+      // 预约：分别展示 PROPOSED 与 CONFIRMED
+      if (appts.length) {
+        html += `<h2 style="margin-top:18px;">预约（${appts.length}）</h2>`;
+        for (const a of appts) {
+          html += `<div class="row"><div class="label">${OctoApp.escapeHtml(a.technician_id)}</div>
+            <div>${OctoApp.fmtTime(a.start_at_ms)} → ${OctoApp.fmtTime(a.end_at_ms)} · <b>${a.status}</b></div></div>`;
+        }
+      }
+
+      // 事件时间线
+      html += `<h2 style="margin-top:18px;">事件流（${events.length}）</h2><div class="timeline">`;
+      events.forEach((e, i) => {
+        html += `
+          <div class="timeline-item">
+            <div class="ver">#${i+1}</div>
+            <div class="kind">${OctoApp.escapeHtml(e.event_type)}</div>
+            <div class="actor">by ${OctoApp.escapeHtml(e.actor_id)} · ${OctoApp.fmtTime(e.at_ms)}</div>
+          </div>`;
+      });
+      html += '</div>';
+
+      box.innerHTML = html;
+    }
+
+    function renderActions(t, appts, evidence, opts) {
+      const {proposedAppt, confirmedAppt, readyEvidence} = opts;
+      const role = me.role;
+      const status = t.status;
+      const ver = t.version;
+      const isAssignee = t.assignee_id === me.actor;
+      const isReporter = t.reporter_id === me.actor;
+      const actions = [];
+
+      // ─── REPORTER ───
+      if (role === 'REPORTER' && status === 'DRAFT' && isReporter) {
+        actions.push({ kind: 'act', label: '确认报修（→ OPEN）', data: { kind: 'confirm' } });
+      }
+      if (role === 'REPORTER' && status === 'ACCEPTED' && isReporter) {
+        actions.push({ kind: 'act', label: '绑定设备 AC-001', data: { kind: 'bind', asset_id: 'as-a-1' } });
+        actions.push({ kind: 'act', label: '绑定设备 PWR-001', data: { kind: 'bind', asset_id: 'as-a-2' } });
+      }
+      // 修复 R-P0-5：proposedAppt 触发确认按钮；confirmedAppt 触发开工按钮
+      if (role === 'REPORTER' && status === 'ACCEPTED' && isReporter && proposedAppt) {
+        actions.push({ kind: 'act', label: '✓ 确认当前提议（→ CONFIRMED）', data: { kind: 'confirm_appt', appointment_id: proposedAppt.appointment_id } });
+        actions.push({ kind: 'fn', label: '拒绝当前提议', data: { fn: 'rejectAppt' } });
+      }
+      if (role === 'REPORTER' && status === 'SCHEDULED' && isReporter && proposedAppt) {
+        actions.push({ kind: 'act', label: '✓ 确认当前提议（→ CONFIRMED）', data: { kind: 'confirm_appt', appointment_id: proposedAppt.appointment_id } });
+        actions.push({ kind: 'fn', label: '拒绝当前提议', data: { fn: 'rejectAppt' } });
+      }
+      if (role === 'REPORTER' && status === 'SCHEDULED' && isReporter && !proposedAppt && confirmedAppt) {
+        actions.push({ kind: 'disabled', label: '预约已确认，等待技工开工', reason: '无需操作' });
+      }
+      if (role === 'REPORTER' && status === 'AWAITING_ACCEPTANCE' && isReporter) {
+        actions.push({ kind: 'fn', label: '✓ 验收通过（→ COMPLETED）', data: { fn: 'acceptFinish' } });
+        actions.push({ kind: 'fn', label: '退回重做（→ IN_PROGRESS）', data: { fn: 'rejectFinish' } });
+      }
+      if (role === 'REPORTER' && (status === 'OPEN' || status === 'ACCEPTED' || status === 'SCHEDULED')) {
+        actions.push({ kind: 'fn', label: '取消任务', data: { fn: 'cancelTask' } });
+      }
+
+      // ─── TECHNICIAN ───
+      if (role === 'TECHNICIAN' && status === 'OPEN') {
+        actions.push({ kind: 'act', label: '接单（→ ACCEPTED）', data: { kind: 'accept' } });
+      }
+      if (role === 'TECHNICIAN' && isAssignee && status === 'ACCEPTED') {
+        actions.push({ kind: 'fn', label: '提议预约（2h 后开始 1h）', data: { fn: 'proposeAppt' } });
+      }
+      if (role === 'TECHNICIAN' && isAssignee && status === 'SCHEDULED' && confirmedAppt && t.asset_id) {
+        actions.push({ kind: 'act', label: '开工（→ IN_PROGRESS）', data: { kind: 'start' } });
+      }
+      if (role === 'TECHNICIAN' && isAssignee && status === 'SCHEDULED' && confirmedAppt && !t.asset_id) {
+        actions.push({ kind: 'disabled', label: '需先绑定设备', reason: '当前任务无设备，需 reporter 绑定' });
+      }
+      if (role === 'TECHNICIAN' && isAssignee && status === 'IN_PROGRESS') {
+        actions.push({ kind: 'fn', label: '记录处置', data: { fn: 'recordProgress' } });
+        actions.push({ kind: 'fn', label: '上传证据', data: { fn: 'uploadEvidence' } });
+        if (readyEvidence.length > 0) {
+          actions.push({ kind: 'act', label: '✓ 完工提交（需 READY 证据）', data: { kind: 'complete', completion_text: '已处理完成' } });
+        } else {
+          actions.push({ kind: 'disabled', label: '完工提交（缺证据，当前不可点）', reason: '需要至少 1 条 READY 证据' });
+        }
+      }
+
+      // ─── MANAGER ───
+      if (role === 'MANAGER' && status === 'OPEN') {
+        actions.push({ kind: 'act', label: '分配给技工甲', data: { kind: 'assign', assignee_id: 'u-tech-1' } });
+        actions.push({ kind: 'act', label: '分配给技工乙', data: { kind: 'assign', assignee_id: 'u-tech-2' } });
+      }
+      if (role === 'MANAGER' && (status === 'SCHEDULED' || status === 'ACCEPTED')) {
+        actions.push({ kind: 'fn', label: '改派给另一技工', data: { fn: 'reassign' } });
+      }
+      if (role === 'MANAGER' && evidence.length > 0) {
+        const last = evidence[evidence.length - 1];
+        if (last.status === 'READY') {
+          // 修复 N12：quarantine 走 act 路径
+          actions.push({ kind: 'act', label: '隔离最后一份证据', data: { kind: 'quarantine', evidence_id: last.evidence_id, reason: '经理隔离' } });
+        }
+      }
+      if (role === 'MANAGER' && ['OPEN', 'ACCEPTED', 'SCHEDULED', 'IN_PROGRESS'].includes(status)) {
+        actions.push({ kind: 'fn', label: '取消任务', data: { fn: 'cancelTask' } });
+      }
+
+      if (actions.length === 0) {
+        return `<div class="empty" style="padding:14px;">当前角色在 ${status} 状态下没有可执行动作</div>`;
+      }
+      return `<div class="role-actions">${
+        actions.map((a, i) => {
+          if (a.kind === 'disabled') return `<button class="btn" disabled title="${OctoApp.escapeHtml(a.reason)}">${OctoApp.escapeHtml(a.label)}</button>`;
+          return `<button class="btn" data-idx="${i}">${OctoApp.escapeHtml(a.label)}</button>`;
+        }).join('')
+      }</div>
+      <script class="actions-data" type="application/json">${JSON.stringify(actions).replace(/</g, '\\u003c')}</` + `script>`;
+    }
+
+    // 委托 click：读嵌入的 actions JSON，按 kind 执行
+    document.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.role-actions button');
+      if (!btn || btn.disabled) return;
+      const wrap = btn.closest('section');
+      const dataEl = wrap.querySelector('script.actions-data');
+      if (!dataEl) return;
+      const actions = JSON.parse(dataEl.textContent);
+      const idx = parseInt(btn.dataset.idx, 10);
+      const a = actions[idx];
+      if (!a) return;
+      if (a.kind === 'act') {
+        act(a.data.kind, { expected_version: currentVer(), ...a.data });
+      } else if (a.kind === 'fn') {
+        window[a.data.fn]();
+      }
+    });
+
+    // ─── 单条动作实现 ───────────────────────────────────
+    async function createDraft(ev) {
+      ev.preventDefault();
+      const f = ev.target;
+      const payload = {
+        idempotency_key: OctoApp.newIdem(),
+        project_id: f.project_id.value,
+        problem_text: f.problem_text.value,
+        contact_name: f.contact_name.value,
+        contact_info: f.contact_info.value,
+        preferred_window: f.preferred_window.value,
+      };
+      try {
+        const r = await OctoApp.api('/api/octosense/v1/tasks', { method: 'POST', body: payload });
+        OctoApp.toast('草稿已创建：' + r.task_id.slice(0,8) + '…');
+        document.querySelector('#new-form [name=idempotency_key]').value = OctoApp.newIdem();
+        f.problem_text.value = ''; f.contact_name.value = ''; f.contact_info.value = ''; f.preferred_window.value = '';
+        await loadList();
+        openTask(r.task_id);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function act(kind, body) {
+      const idem = OctoApp.newIdem();
+      const tid = ACTIVE.taskId;
+      let path, payload = { ...body, idempotency_key: idem };
+      switch (kind) {
+        case 'confirm': path = `/api/octosense/v1/tasks/${tid}/confirm`; break;
+        case 'accept': path = `/api/octosense/v1/tasks/${tid}/accept`; break;
+        case 'assign': path = `/api/octosense/v1/tasks/${tid}/assign`; break;
+        case 'bind': path = `/api/octosense/v1/tasks/${tid}/bind-asset`; break;
+        case 'start': path = `/api/octosense/v1/tasks/${tid}/start`; break;
+        case 'complete': path = `/api/octosense/v1/tasks/${tid}/complete`; break;
+        case 'accept_finish': path = `/api/octosense/v1/tasks/${tid}/accept-finish`; break;
+        case 'confirm_appt': path = `/api/octosense/v1/tasks/${tid}/appointments/${payload.appointment_id}/confirm`; delete payload.appointment_id; break;
+        case 'quarantine': path = `/api/octosense/v1/tasks/${tid}/evidence/${payload.evidence_id}/quarantine`; break;
+      }
+      try {
+        await OctoApp.api(path, { method: 'POST', body: payload });
+        OctoApp.toast('✓ ' + kind);
+        await loadList(); await openTask(tid);
+      } catch (e) { OctoApp.toast('失败：' + e.message + (e.detail ? ' (' + e.detail + ')' : ''), 'error'); }
+    }
+
+    async function proposeAppt() {
+      const start = Date.now() + 3600_000 * 2;
+      const end = start + 3600_000;
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/appointments`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(), expected_version: currentVer(), start_at_ms: start, end_at_ms: end }
+        });
+        OctoApp.toast('✓ 预约已提议');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function rejectAppt() {
+      const reason = prompt('拒绝理由：', '时间不合适');
+      if (!reason) return;
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/appointments/reject`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(), expected_version: currentVer(), reason }
+        });
+        OctoApp.toast('✓ 已拒绝当前提议');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function rejectFinish() {
+      const reason = prompt('退回理由：', '需要补充处理');
+      if (!reason) return;
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/reject-finish`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(), expected_version: currentVer(), reason }
+        });
+        OctoApp.toast('✓ 已退回');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function acceptFinish() {
+      // N08：经理代验收需理由
+      const reason = me.role === 'MANAGER' ? (prompt('经理代验收理由：', '代验') || '') : '';
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/accept-finish`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(), expected_version: currentVer(), reason }
+        });
+        OctoApp.toast('✓ 已验收');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function cancelTask() {
+      const reason = prompt('取消理由（必填）：', '不再需要');
+      if (!reason) return;
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/cancel`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(), expected_version: currentVer(), reason }
+        });
+        OctoApp.toast('✓ 已取消');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function reassign() {
+      const target = prompt('改派到技工 (u-tech-1 / u-tech-2)：', 'u-tech-2');
+      if (!target) return;
+      const reason = prompt('理由：', '改派');
+      if (!reason) return;
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/reassign`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(), expected_version: currentVer(), assignee_id: target, reason }
+        });
+        OctoApp.toast('✓ 改派');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function recordProgress() {
+      const note = prompt('处置记录：', '更换压缩机继电器');
+      if (!note) return;
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/progress`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(), expected_version: currentVer(), note }
+        });
+        OctoApp.toast('✓ 处置已记录');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function uploadEvidence() {
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFUlEQVR42mNk+M9QzwAEjDAGABCfAOhTRcGgAAAAAElFTkSuQmCC';
+      try {
+        const blob = new Blob([Uint8Array.from(atob(tinyPng), c => c.charCodeAt(0))], { type: 'image/png' });
+        const fd = new FormData();
+        fd.append('idempotency_key', OctoApp.newIdem());
+        fd.append('expected_version', String(currentVer()));
+        fd.append('file', blob, 'evidence-' + Date.now() + '.png');
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/evidence`, {
+          method: 'POST',
+          headers: { 'X-Actor-Id': me.actor },
+          body: fd,
+        });
+        OctoApp.toast('✓ 证据已上传');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    // 暴露给内联 onclick
+    window.createDraft = createDraft;
+    window.openTask = openTask;
+    window.act = act;
+    window.proposeAppt = proposeAppt;
+    window.rejectAppt = rejectAppt;
+    window.rejectFinish = rejectFinish;
+    window.cancelTask = cancelTask;
+    window.reassign = reassign;
+    window.recordProgress = recordProgress;
+    window.uploadEvidence = uploadEvidence;
+    window.acceptFinish = acceptFinish;
+    window.logout = OctoApp.clearActor; // alias
+
+    loadList();
+
+    // 修复 R-P1-4：URL ?task=<id> 自动打开
+    const params = new URLSearchParams(location.search);
+    const urlTaskId = params.get('task');
+    if (urlTaskId) {
+      openTask(urlTaskId);
+    }
+  </script>
+</body>
+</html>

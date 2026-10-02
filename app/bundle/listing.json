@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "subtitle": "围绕同一项维修的三角色协作工作台",
+  "description": "报修 → 技工接单 → 设备确认 → 预约 → 处理 → 完工 → 独立验收，按本地事实源走完整闭环。本 bundle 为 L0 最小切片，仅演示原生按钮 + 持久化回读，业务闭环见后续 L1-L6 提交材料。",
+  "category": "productivity",
+  "keywords": ["maintenance", "collaboration", "repair"],
+  "screenshots": ["screenshots/01-main.png"],
+  "icon": "assets/icon.svg",
+  "platforms": ["macos"],
+  "publisher": {
+    "name": "Abram / OctoSense (Local Dev)",
+    "support": "https://example.com/support",
+    "privacy_policy_url": "https://example.com/privacy"
+  },
+  "release_notes": "L0 最小切片：石墨主题 + 三按钮触发 + fs jail 持久化 + 重开回读。",
+  "age_rating": "all",
+  "license": "Apache-2.0"
+}

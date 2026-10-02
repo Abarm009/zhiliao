@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备 360° 视图</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #1a2129; --panel2: #212b36; --line: #2d3a47;
+    --text: #e6edf3; --muted: #8b98a5; --accent: #4f9cf9; --ok: #3fb970; --warn: #f6bd16;
+    --danger: #e5534b; --memory: #b989f0; --cap: #6aa9c9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  header .spacer { flex: 1; }
+  header a.nav { font-size: 12px; color: var(--muted); text-decoration: none; }
+  header a.nav:hover { color: var(--accent); }
+  .pill {
+    display: inline-block; padding: 1px 9px; border-radius: 10px; font-size: 12px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .pill.status { color: var(--ok); border-color: var(--ok); }
+  .pill.crit { color: var(--warn); border-color: var(--warn); }
+  .pill.overdue { color: var(--danger); border-color: var(--danger); }
+  .pill.wo-wait { color: var(--muted); }
+  .pill.wo-doing { color: var(--warn); border-color: var(--warn); }
+  .pill.wo-done { color: var(--ok); border-color: var(--ok); }
+
+  main { flex: 1; padding: 18px 22px 40px; }
+  .wrap { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  #headMeta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #headMeta .aid { font-family: Consolas, monospace; font-size: 12px; color: var(--accent); }
+  #headMeta .sub { font-size: 12px; color: var(--muted); }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card h2 { font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 10px; }
+  .card h2 .cnt { color: var(--muted); font-weight: 400; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 2px 18px; }
+  .kv { display: flex; gap: 8px; padding: 4px 0; line-height: 1.5; font-size: 13px;
+    border-bottom: 1px dashed var(--line); }
+  .kv .k { color: var(--muted); min-width: 84px; flex-shrink: 0; }
+  .kv .v { flex: 1; word-break: break-word; }
+
+  .rtGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .rtCell {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .rtCell .rl { font-size: 11.5px; color: var(--muted); margin-bottom: 2px; }
+  .rtCell .rv { font-size: 15px; font-family: Consolas, monospace; }
+  .rtCell .rv small { font-size: 11px; color: var(--muted); font-family: inherit; }
+  .rtCell.locked { border-color: var(--danger); }
+  .rtCell.locked .rv { color: var(--danger); }
+  .rtTs { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+
+  .wo {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 9px 12px; margin-bottom: 8px; font-size: 12.5px; line-height: 1.7;
+  }
+  .wo .woHead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .wo .woId { font-family: Consolas, monospace; color: var(--accent); }
+  .wo .woTime { color: var(--muted); font-size: 11.5px; }
+  .wo .woHead .pill { margin-left: auto; }
+  .wo .woMeta { color: var(--muted); font-size: 12px; }
+  .wo .woRaw {
+    margin-top: 5px; padding: 6px 9px; border-radius: 6px; background: var(--bg);
+    border-left: 3px solid var(--accent); color: var(--text); word-break: break-word;
+  }
+
+  .empty { color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  #err {
+    display: none; max-width: 960px; margin: 0 auto 14px; border-radius: 9px;
+    padding: 12px 16px; font-size: 13px; line-height: 1.6;
+    border: 1px dashed var(--danger); color: #f0a09b; background: #241a1a;
+  }
+  #loading { max-width: 960px; margin: 0 auto; color: var(--muted); font-size: 13px; }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>设备 <span>360° 视图</span></h1>
+  <div id="headMeta"></div>
+  <div class="spacer"></div>
+  <a class="nav" href="/ops" title="返回 Agent 回放台">↩ 回放台</a>
+  <a class="nav" href="/graph" target="_blank" rel="noopener" title="设备台账知识图谱">图谱 ↗</a>
+</header>
+
+<main>
+  <div id="err"></div>
+  <div id="loading">加载中…</div>
+  <div class="wrap" id="content" style="display:none">
+    <section class="card">
+      <h2>台账信息</h2>
+      <div class="grid" id="ledger"></div>
+    </section>
+    <section class="card">
+      <h2>运行参数</h2>
+      <div id="runtime"></div>
+    </section>
+    <section class="card">
+      <h2>维修记录 <span class="cnt" id="woCount"></span></h2>
+      <div id="wos"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+/* ── 枚举中文对照（与 ops.html 同表）────────────────────────── */
+const SYMPTOM = {no_cooling:"不制冷",no_heating:"不制热",unit_wont_start:"机组不启动",weak_airflow:"风量小",water_leak:"漏水",abnormal_noise:"异响",temp_uneven:"温度不均",odor:"有异味",sanitation:"垃圾/卫生",smoking:"吸烟",overcrowding:"人员过多"};
+const CATEGORY = {HVAC:"暖通空调",PLUMB:"给排水",ELEC:"电气",FIRE:"消防",VERT:"垂直交通",CLEAN:"保洁",SECURITY:"安防"};
+const FAN_SPEED = {off:"停转",low:"低速",mid:"中速",high:"高速"};
+const WO_STATUS = {"待派单":"wo-wait","维修中":"wo-doing","已完成":"wo-done"};
+/* 运行参数字段（字段名 ↔ asset_runtime 表列；power_kw 兼容接口契约，
+   runtime_hours_24h 为当前库实际列，两者皆按非空渲染） */
+const RUNTIME_FIELDS = [
+  ["supply_air_temp_c", "送风", "℃"],
+  ["return_air_temp_c", "回风", "℃"],
+  ["setpoint_c", "设定", "℃"],
+  ["valve_position_pct", "阀位", "%"],
+  ["water_flow_lpm", "流量", "Lpm"],
+  ["fan_speed", "风速", ""],
+  ["power_kw", "功率", "kW"],
+  ["runtime_hours_24h", "24h运行", "h"],
+];
+
+const $ = (s) => document.querySelector(s);
+function esc(s) {
+  return String(s).replace(/[&<>"']/g,
+    c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function showErr(msg) {
+  const e = $("#err"); e.textContent = msg; e.style.display = "block";
+  $("#loading").style.display = "none";
+}
+
+/* asset_id 从路径解析：/asset/{asset_id} */
+const assetId = decodeURIComponent(
+  location.pathname.split("/").filter(Boolean).pop() || "");
+document.title = assetId ? `${assetId} · 设备 360° 视图` : "设备 360° 视图";
+
+function kv(k, v) {
+  const has = v !== null && v !== undefined && v !== "";
+  return `<div class="kv"><span class="k">${k}</span>` +
+    `<span class="v">${has ? v : "—"}</span></div>`;
+}
+const join2 = (a, b, sep) => [a, b].filter(x => x != null && x !== "").join(sep) || null;
+
+function renderHeader(a) {
+  document.title = `${a.asset_name || a.asset_id} · 设备 360° 视图`;
+  $("#headMeta").innerHTML =
+    `<span class="aid">${esc(a.asset_id)}</span>` +
+    (a.status ? `<span class="pill status">${esc(a.status)}</span>` : "") +
+    (a.criticality ? `<span class="pill crit">重要性：${esc(a.criticality)}</span>` : "") +
+    (a.is_overdue_service ? `<span class="pill overdue">超期服役</span>` : "") +
+    (a.type_name ? `<span class="sub">${esc(a.type_name)}</span>` : "");
+}
+
+function renderLedger(a) {
+  $("#ledger").innerHTML =
+    kv("设备名称", esc(a.asset_name ?? "")) +
+    kv("设备编号", esc(a.asset_no ?? "")) +
+    kv("类型", esc(a.type_name && a.asset_type_id
+        ? `${a.type_name}（${a.asset_type_id}）`
+        : (a.type_name ?? a.asset_type_id ?? ""))) +
+    kv("专业", esc(CATEGORY[a.category] || a.category || "")) +
+    kv("品牌型号", esc(join2(a.brand, a.spec_model, " / ") ?? "")) +
+    kv("楼栋楼层", esc(join2(a.building_id,
+        a.floor != null ? `${a.floor}F` : null, " · ") ?? "")) +
+    kv("安装位置", esc(a.located_in ?? "")) +
+    kv("所属设备", esc(a.parent_asset_id ?? "")) +
+    kv("投运日期", esc(a.commissioned_date ?? "")) +
+    kv("设计寿命", a.design_life_years != null ? `${a.design_life_years} 年` : null) +
+    kv("超期服役", a.is_overdue_service
+        ? `<span style="color:var(--danger)">是</span>` : "否") +
+    kv("保修至", esc(a.warranty_until ?? "")) +
+    kv("供应商", esc(join2(a.vendor_name, a.vendor_contact, " · ") ?? "")) +
+    kv("产权", esc(a.ownership ?? "")) +
+    kv("责任部门", esc(a.responsible_dept ?? "")) +
+    kv("责任人", esc(join2(a.responsible_person, a.responsible_phone, " · ") ?? "")) +
+    kv("备注", esc(a.notes ?? ""));
+}
+
+function renderRuntime(rt) {
+  const box = $("#runtime");
+  if (!rt) {
+    box.innerHTML = `<div class="empty">暂无运行数据（该设备类型无传感器）</div>`;
+    return;
+  }
+  const cells = [];
+  for (const [key, label, unit] of RUNTIME_FIELDS) {
+    const v = rt[key];
+    if (v === null || v === undefined || v === "") continue;
+    const shown = key === "fan_speed" ? (FAN_SPEED[v] || v) : v;
+    cells.push(`<div class="rtCell"><div class="rl">${label}</div>` +
+      `<div class="rv">${esc(shown)}${unit ? ` <small>${unit}</small>` : ""}</div></div>`);
+  }
+  const lock = rt.lock_status;
+  if (lock === "billing_locked") {
+    cells.push(`<div class="rtCell locked"><div class="rl">锁机状态</div>` +
+      `<div class="rv">🔒 欠费锁机</div></div>`);
+  } else if (lock && lock !== "normal") {
+    cells.push(`<div class="rtCell"><div class="rl">锁机状态</div>` +
+      `<div class="rv">${esc(lock)}</div></div>`);
+  }
+  box.innerHTML =
+    (cells.length ? `<div class="rtGrid">${cells.join("")}</div>`
+                  : `<div class="empty">快照内暂无可展示字段</div>`) +
+    (rt.ts ? `<div class="rtTs">快照时间：${esc(rt.ts)}</div>` : "");
+}
+
+function renderWorkorders(list) {
+  $("#woCount").textContent = `共 ${list.length} 条`;
+  const box = $("#wos");
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">暂无维修记录</div>`;
+    return;
+  }
+  box.innerHTML = list.map(w => {
+    const stCls = WO_STATUS[w.status] || "wo-wait";
+    const urgent = w.urgency === "特急" || w.urgency === "紧急";
+    return `<div class="wo">` +
+      `<div class="woHead"><span class="woId">${esc(w.wo_id)}</span>` +
+      `<span class="woTime">${esc(w.created_at || "")}</span>` +
+      `<span class="pill ${stCls}">${esc(w.status || "待派单")}</span></div>` +
+      `<div class="woMeta">位置 ${esc(w.space_id || "待定")} · ` +
+      `症状 ${esc(SYMPTOM[w.symptom] || w.symptom || "—")} · ` +
+      `紧急度 <span${urgent ? ' style="color:var(--danger)"' : ""}>${esc(w.urgency || "一般")}</span></div>` +
+      (w.raw_text ? `<div class="woRaw">${esc(w.raw_text)}</div>` : "") +
+      `</div>`;
+  }).join("");
+}
+
+async function boot() {
+  if (!assetId) { showErr("路径中缺少 asset_id"); return; }
+  let res;
+  try {
+    res = await fetch(`/api/ops/asset/${encodeURIComponent(assetId)}`);
+  } catch (e) {
+    showErr(`加载失败：无法连接服务（${e.message}）`);
+    return;
+  }
+  if (res.status === 404) { showErr(`设备不存在：${assetId}`); return; }
+  if (!res.ok) { showErr(`加载失败：HTTP ${res.status}`); return; }
+  let d;
+  try {
+    d = await res.json();
+  } catch (e) {
+    showErr("加载失败：接口返回不是合法 JSON");
+    return;
+  }
+  $("#loading").style.display = "none";
+  $("#content").style.display = "";
+  renderHeader(d.asset || {});
+  renderLedger(d.asset || {});
+  renderRuntime(d.runtime || null);
+  renderWorkorders(d.workorders || []);
+}
+boot();
+</script>
+</body>
+</html>

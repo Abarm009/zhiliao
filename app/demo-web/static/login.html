@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>登录 · OctoSense Repair</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <h1>选择身份进入</h1>
+      <p class="subtitle">演示用本地身份切换；生产环境应接 host session / 原生 Bearer</p>
+      <div id="role-grid" class="role-grid"></div>
+      <div class="hint">
+        <b>说明</b><br>
+        · 报修人走 REPORTER；技工走 TECHNICIAN；经理走 MANAGER。<br>
+        · 同一任务不同角色登录可看到不同的待处理动作；服务端强制权限，角色不对的按钮会被拒绝。<br>
+        · 演示数据：2 项目 / 5 用户 / 2 设备 / 1 空间，所有任务从零在浏览器里创建。
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    const grid = document.getElementById('role-grid');
+    OctoApp.ACTORS.forEach(a => {
+      const card = document.createElement('button');
+      card.className = 'role-card';
+      card.type = 'button';
+      card.dataset.actor = a.actor;
+      const projs = OctoApp.projectListOf(a);
+      card.innerHTML = `
+        <div class="name">${OctoApp.escapeHtml(a.name)}</div>
+        <div class="meta">
+          <span class="role ${a.cls}">${a.role}</span>
+          ${OctoApp.escapeHtml(projs.join(' · '))} · ${OctoApp.escapeHtml(a.skills || '')}
+          <div style="margin-top:6px;">${OctoApp.escapeHtml(a.desc)}</div>
+          <div style="margin-top:6px;font-family:ui-monospace,monospace;color:var(--secondary);">${OctoApp.escapeHtml(a.actor)}</div>
+        </div>`;
+      card.onclick = () => {
+        OctoApp.setActor(a);
+        location.href = '/workbench';
+      };
+      grid.appendChild(card);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设施运维 Agent · 三栏回放</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #1a2129; --panel2: #212b36; --line: #2d3a47;
+    --text: #e6edf3; --muted: #8b98a5; --accent: #4f9cf9; --ok: #3fb970; --warn: #f6bd16;
+    --danger: #e5534b; --memory: #b989f0; --cap: #6aa9c9;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 9px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  header .spacer { flex: 1; }
+  .tiers { display: flex; gap: 4px; background: var(--panel2); border-radius: 8px; padding: 3px; }
+  .tiers button {
+    border: none; background: none; color: var(--muted); font-size: 12px;
+    padding: 5px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .tiers button.on { background: var(--accent); color: #fff; }
+  select, button.act {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button.act:hover { border-color: var(--accent); }
+  #status { color: var(--muted); font-size: 12px; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ── 左栏：租户企微视角 ─────────────────────── */
+  #tenantCol {
+    width: 330px; min-width: 300px; background: var(--panel);
+    border-right: 1px solid var(--line); display: flex; flex-direction: column;
+  }
+  .colTitle {
+    padding: 10px 14px; font-size: 13px; color: var(--muted);
+    border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px;
+  }
+  .colTitle b { color: var(--text); font-size: 14px; }
+  #chat { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .bubble {
+    max-width: 86%; padding: 9px 12px; border-radius: 10px; font-size: 13px;
+    line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+  }
+  .bubble.user { align-self: flex-end; background: #3478f6; color: #fff; border-bottom-right-radius: 3px; }
+  .bubble.agent { align-self: flex-start; background: var(--panel2); border: 1px solid var(--line); border-bottom-left-radius: 3px; }
+  .wo-chip {
+    color: var(--accent); cursor: pointer;   /* 去虚线底色/等宽字体，保留文字颜色 */
+  }
+  .wo-chip:hover { color: #7cb9ff; text-decoration: underline; }
+  .typing { align-self: flex-start; color: var(--muted); font-size: 12px; padding: 4px 8px; }
+  .typing::after { content: "▍"; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #inputBar, #mgrBar { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
+  #inputBar textarea, #mgrBar textarea {
+    flex: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 13px; resize: none; height: 58px;
+    font-family: inherit;
+  }
+  #sendBtn, #mgrSend {
+    background: var(--accent); border: none; color: #fff; border-radius: 8px;
+    padding: 0 18px; font-size: 13px; cursor: pointer;
+  }
+  #sendBtn:disabled { opacity: .5; cursor: not-allowed; }
+  /* 发送键在 Agent 工作中变为红色终止键 */
+  #sendBtn.stopping { background: var(--danger); }
+  #sendBtn.stopping:hover { filter: brightness(1.15); }
+  /* 经理视角：演示提示（输入后回显） */
+  .mgrHint {
+    align-self: flex-start; background: var(--panel2); border: 1px dashed var(--line);
+    border-radius: 8px; color: var(--muted); font-size: 12px; padding: 7px 10px;
+  }
+  #liveBadge {
+    display: inline-block; margin-left: 10px; padding: 1px 8px; border-radius: 10px;
+    background: var(--memory, #7c5cff); color: #fff; font-size: 11px; font-weight: 500;
+    vertical-align: middle;
+  }
+  #liveBadge.off { background: var(--muted, #999); }
+  #liveBadge.blink { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  /* ── 中栏：Agent 时间线（deepseek-harness 式披露行）── */
+  #flowCol { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+  #flow { flex: 1; overflow-y: auto; padding: 16px 22px; display: flex; flex-direction: column; gap: 7px; }
+
+  /* ── 节点画布：工具调用状态（吸顶，时间线从下方滚过）── */
+  #nodePanel {
+    position: sticky; top: -16px; z-index: 6; background: var(--panel);
+    margin: -16px -22px 6px; padding: 12px 22px 10px; border-bottom: 1px solid var(--line);
+  }
+  #nodeGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .tnode {
+    position: relative; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 6px 6px; text-align: center; cursor: pointer;
+    opacity: .5; transition: opacity .3s, border-color .3s, box-shadow .3s;
+  }
+  .tnode:hover { opacity: .9; }
+  .tnode .ticon { font-size: 17px; line-height: 1.2; }
+  .tnode .tname { font-size: 12px; margin-top: 2px; }
+  .tnode .ten { font-size: 10px; color: var(--muted); font-family: Consolas, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tnode .tbadge {
+    position: absolute; top: -7px; right: -4px; font-size: 10px; line-height: 1.5;
+    padding: 0 6px; border-radius: 8px; background: var(--bg);
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  /* 四档状态：未调用(灰) < 调用过(暗淡) < 已完成(亮) < 调用中(最亮+呼吸) */
+  .tnode.stale { opacity: .62; border-color: var(--line); }
+  .tnode.stale .tbadge { color: var(--muted); }
+  .tnode.done { opacity: .95; border-color: var(--ok); }
+  .tnode.done .tbadge { color: var(--ok); border-color: var(--ok); }
+  .tnode.active {
+    opacity: 1; border-color: var(--accent); color: #fff;
+    animation: breathe 1.8s ease-in-out infinite;
+  }
+  .tnode.active .tbadge { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .tnode.err { border-color: var(--danger); }
+  .tnode.err .tbadge { color: var(--danger); border-color: var(--danger); }
+  .tnode.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  @keyframes breathe {
+    0%, 100% { box-shadow: 0 0 3px rgba(79, 156, 249, .35); }
+    50% { box-shadow: 0 0 18px rgba(79, 156, 249, .95); }
+  }
+  /* 节点详情：该工具全部调用的文字摘要 */
+  #nodeDetail {
+    margin-top: 10px; background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 12px; max-height: 320px; overflow-y: auto;
+  }
+  #nodeDetail .ndHead { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+  #nodeDetail .ndState { font-size: 11px; padding: 1px 8px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); }
+  #nodeDetail .ndState.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+  #nodeDetail .ndState.done { color: var(--ok); border-color: var(--ok); }
+  #nodeDetail .ndState.stale { color: var(--muted); }
+  #nodeDetail .ndx { margin-left: auto; cursor: pointer; color: var(--muted); padding: 0 4px; }
+  #nodeDetail .ndx:hover { color: var(--text); }
+  #nodeDetail .ndEmpty { margin-top: 7px; color: var(--muted); font-size: 12px; }
+  #nodeDetail .ndCall { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
+  #nodeDetail .ndMeta { font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+
+  /* 用户消息：浅蓝气泡 + 复制钮（流内右上） */
+  .urow { align-self: flex-end; max-width: 78%; display: flex; align-items: flex-start; gap: 6px; }
+  .urow .ub {
+    background: rgba(79, 156, 249, .16); border: 1px solid rgba(79, 156, 249, .45);
+    color: var(--text); border-radius: 12px 12px 3px 12px; padding: 8px 12px;
+    font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+  }
+  .urow .ucp {
+    flex: none; border: 1px solid var(--line); background: var(--panel2); color: var(--muted);
+    border-radius: 6px; font-size: 11px; padding: 2px 6px; cursor: pointer; margin-top: 4px;
+  }
+  .urow .ucp:hover { color: var(--text); border-color: var(--accent); }
+
+  /* 模型正文（中间叙述 / 最终回复）：整段白字 */
+  .say {
+    font-size: 13px; line-height: 1.65; color: var(--text);
+    white-space: pre-wrap; word-break: break-word; padding: 1px 4px;
+  }
+
+  /* 披露行：图标 + 标题 · 一行灰色摘要 …… 右侧 ms/步号 + 展开箭头 */
+  .drow { min-width: 0; }
+  .drow > .row {
+    display: flex; align-items: center; min-height: 26px; cursor: pointer; user-select: none;
+    position: relative; overflow: hidden; border-radius: 6px; padding: 1px 8px;
+  }
+  .drow > .row:hover { background: rgba(255, 255, 255, .045); }
+  .row .ric { flex: none; width: 20px; text-align: center; font-size: 12px; }
+  .row .rtitle { flex: none; font-family: Consolas, monospace; font-weight: 600; font-size: 12.5px; color: var(--accent); }
+  .row .rsep { flex: none; width: 2px; height: 2px; border-radius: 1px; background: var(--muted); opacity: .6; margin: 0 8px; }
+  .row .rsum {
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--muted); font-size: 12.5px; line-height: 24px;
+  }
+  .row .rsum b { color: var(--text); font-weight: 600; }
+  .row .rms { flex: none; margin-left: 8px; font: 10.5px Consolas, monospace; color: #5a6673; white-space: nowrap; }
+  .row .rarr { flex: none; margin-left: 7px; color: var(--muted); font-size: 9px; transition: transform .15s; }
+  .drow.open > .row .rarr { transform: rotate(90deg); }
+  .drow .rbody { display: none; margin: 3px 0 4px 28px; }
+  .drow.open > .rbody { display: block; }
+
+  /* 执行中：一道流光扫过行（dsh running sweep） */
+  .drow.running > .row::after {
+    content: ""; position: absolute; inset-block: 0; left: 0; width: 180px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(79, 156, 249, .16), transparent);
+    animation: dshSweep 2.2s ease-out infinite;
+  }
+  @keyframes dshSweep { 0% { left: -180px; } 90%, 100% { left: 100%; } }
+
+  /* 工具行展开体：IN/OUT 代码卡 */
+  .ioCard {
+    background: rgba(0, 0, 0, .28); border: 1px solid var(--line); border-radius: 8px;
+    padding: 9px 12px; max-height: 320px; overflow: auto;
+    font-family: Consolas, "Microsoft YaHei", monospace; font-size: 11.5px; line-height: 1.55;
+    color: #b8c4cf; white-space: pre-wrap; word-break: break-all;
+  }
+  .ioCard .lab { color: var(--muted); }
+
+  /* 行色调 */
+  .drow.recall > .row .rtitle, .drow.recall > .row .ric { color: var(--memory); }
+  .drow.escalate > .row .rtitle { color: var(--danger); }
+  .drow.err-capability > .row .rtitle { color: var(--cap); }
+  .drow.err-system > .row .rtitle { color: var(--danger); }
+  .drow[data-err] > .row .rsum { color: #f0a09b; }
+  .drow.ctx > .row .rtitle { color: var(--cap); font-weight: 400; }
+  .drow.ctx-done { display: none; }   /* 上下文注入完成后隐藏（信息已在节点与回放里） */
+  /* Think 行：灰标题灰正文；流式生长时展开跟随，落定后折叠成一行摘要（点击可再展开） */
+  .drow.think > .row .rtitle { color: var(--muted); font-weight: 400; }
+  .thinkBody {
+    color: var(--muted); font-size: 12.5px; line-height: 22px;
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 264px; overflow-y: auto; padding-right: 6px;
+  }
+  .drow.noexp > .row { cursor: default; }
+  .drow.noexp > .row .rarr { visibility: hidden; }
+
+  .banner {
+    border-radius: 9px; padding: 10px 14px; font-size: 13px; line-height: 1.6;
+    border: 1px dashed var(--line); color: var(--muted);
+  }
+  .banner.safety { border-color: var(--danger); color: #f0a09b; background: #241a1a; }
+  .banner.done { border-color: var(--ok); color: var(--ok); }
+  .banner.warn { border-color: var(--warn); color: var(--warn); }
+  .nudge {
+    font-size: 12px; color: var(--warn); line-height: 1.5; padding: 2px 8px;
+    border-left: 2px solid var(--warn);
+  }
+
+  /* ── 右栏：经理视角 ───────────────────────── */
+  #mgrCol {
+    width: 400px; min-width: 360px; background: var(--panel);
+    border-left: 1px solid var(--line); display: flex; flex-direction: column;
+  }
+  #mgr { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .mgrCard {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+    font-size: 13px;
+  }
+  .mgrCard h3 { font-size: 13px; color: var(--accent); margin-bottom: 8px; font-weight: 600; }
+  /* 对话包：每轮判定追加一张，内部小节标题拉开间距 */
+  .mgrPack h3 { margin-top: 12px; }
+  .mgrPack h3:first-child { margin-top: 0; }
+  .mgrPack .noRel { color: var(--muted); font-size: 12px; }
+  /* 安全升级：经理视角卡片红框呼吸告警 */
+  .mgrCard.alert { border-color: var(--danger); animation: alertPulse 1.6s ease-in-out infinite; }
+  @keyframes alertPulse {
+    0%, 100% { box-shadow: 0 0 2px rgba(229, 83, 75, .3); }
+    50% { box-shadow: 0 0 16px rgba(229, 83, 75, .9); }
+  }
+  .kv { display: flex; gap: 8px; padding: 3px 0; line-height: 1.5; }
+  .kv .k { color: var(--muted); min-width: 96px; flex-shrink: 0; }
+  .kv .v { flex: 1; word-break: break-word; }
+  .pill {
+    display: inline-block; padding: 0 4px 0 0; margin: 0 4px 0 0;
+    font-size: 12px; background: none; border: none;   /* 去背景色/边框，只留文字颜色 */
+  }
+  .pill.owner { color: var(--accent); }
+  .pill.tenant { color: var(--warn); }
+  .pill.shared, .pill.vendor { color: var(--ok); }
+  .pill.unclear { color: var(--danger); }
+  .pill.esc { color: var(--danger); font-weight: 600; }
+  .pill.mem { color: var(--memory); font-family: Consolas, monospace; }
+  .empty { color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  .assetRow { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+  .assetRow:last-child { border-bottom: none; }
+  .assetRow .lock { color: var(--danger); font-size: 12px; }
+
+  /* ── 弹窗 ─────────────────────────────────── */
+  .modalWrap {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none;
+    align-items: center; justify-content: center; z-index: 20;
+  }
+  .modalWrap.show { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    width: min(680px, 92vw); max-height: 84vh; display: flex; flex-direction: column;
+  }
+  .modal .mhead {
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; font-size: 14px;
+  }
+  .modal .mhead .x { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 18px; }
+  .modal .mbody { padding: 14px 16px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+  .sessRow {
+    display: flex; gap: 10px; padding: 8px 6px; border-bottom: 1px dashed var(--line);
+    cursor: pointer; align-items: center; font-size: 12.5px;
+  }
+  .sessRow:hover { background: var(--panel2); }
+  .sessRow .sid { font-family: Consolas, monospace; color: var(--accent); }
+  .sessRow .txt { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── 位置选择器（左栏对话框内嵌卡片）────────── */
+  .pickRow { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .pickRow label { width: 44px; color: var(--muted); font-size: 12.5px; flex: none; }
+  .pickRow select, .pickRow textarea {
+    flex: 1; background: var(--bg); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 13px;
+  }
+  .pickRow textarea { resize: vertical; font-family: inherit; }
+  .locCard {
+    align-self: stretch; background: var(--panel2); border: 1px solid var(--accent);
+    border-radius: 10px; padding: 10px 12px; font-size: 13px;
+  }
+  .locCard .lcTitle { font-weight: 600; margin-bottom: 4px; }
+  .locCard .lcHint { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .locCard .lcFoot { text-align: right; margin-top: 6px; }
+  .locCard.sent { opacity: .55; }
+  /* 安全信息补全卡：红色主题，手机号必填 */
+  .locCard.safety { border-color: var(--danger); }
+  .locCard.safety .lcTitle { color: var(--danger); }
+  .locCard input[type="tel"] {
+    flex: 1; background: var(--bg); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12.5px;
+  }
+  .locCard input.bad { border-color: var(--danger); animation: pulse .5s 2; }
+
+  /* ── 栏宽拖拽分隔条 ─────────────────────────── */
+  .colDrag { flex: none; width: 5px; cursor: col-resize; }
+  .colDrag:hover, .colDrag.on { background: var(--accent); opacity: .45; }
+
+  /* ── 接单卡片（项目经理视角）───────────────────── */
+  .woCard {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 8px; font-size: 12.5px; line-height: 1.7;
+  }
+  .woCard .woHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+  .woCard .woBrief {
+    margin-top: 6px; padding: 7px 10px; border-radius: 6px;
+    background: var(--panel2); border-left: 3px solid var(--accent);
+    font-size: 12.5px; line-height: 1.65;
+  }
+  .woCard .woBrief .bLabel {
+    color: var(--accent); font-weight: 600; font-size: 12px; margin-bottom: 2px;
+  }
+  .woCard.sent { opacity: .7; }
+  .woCard .woAuto { color: var(--warn); font-size: 12px; margin-top: 4px; }
+  .woCard .woAutoErr { color: var(--danger); font-size: 12px; margin-top: 4px; }
+  .woCard .pickRow { margin: 5px 0; }
+  .woCard .pickRow label { width: 34px; }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>设施运维 <span>Agent 回放台</span><span id="liveBadge" title="走 /api/ops/chat/stream，事件逐条推送">⚡ 实时流</span><a href="/graph" target="_blank" rel="noopener" title="设备台账知识图谱" style="margin-left:12px;font-size:12px;color:var(--muted);text-decoration:none">图谱 ↗</a></h1>
+  <div class="tiers" id="tiers"></div>
+  <select id="mode">
+    <option value="replay">回放模式 · 2026-08-23 10:00</option>
+    <option value="live">交互模式 · 当前时间</option>
+  </select>
+  <span id="status"></span>
+  <div class="spacer"></div>
+  <button class="act" id="newBtn">新会话</button>
+  <button class="act" id="histBtn">历史会话</button>
+  <button class="act" id="resetBtn">重置数据</button>
+</header>
+
+<main>
+  <!-- 左：租户（企微口吻）-->
+  <section id="tenantCol">
+    <div class="colTitle"><b>租户视角</b><span>企业微信报修</span></div>
+    <div id="chat"></div>
+    <div id="inputBar">
+      <textarea id="input" placeholder="输入报修文本，如：A座25楼东侧会议室空调又不制冷了"></textarea>
+      <button id="sendBtn">发送</button>
+    </div>
+  </section>
+
+  <div class="colDrag" id="dragL" title="拖动调整栏宽"></div>
+
+  <!-- 中：Agent 时间线 -->
+  <section id="flowCol">
+    <div class="colTitle"><b>Agent 时间线</b><span>节点画布 · 点击节点看调用详情</span><span id="callStats" style="margin-left:auto;color:var(--muted)"></span><span id="tok" style="margin-left:10px;color:var(--memory)"></span></div>
+    <div id="flow">
+      <div id="nodePanel">
+        <div id="nodeGrid"></div>
+        <div id="nodeDetail" style="display:none"></div>
+      </div>
+      <div class="empty">发送报修后，上方节点画布实时展示各工具的调用状态（亮起=调用中），下方为时间线（工具输出摘要 + 回复）。</div>
+    </div>
+  </section>
+
+  <div class="colDrag" id="dragR" title="拖动调整栏宽"></div>
+
+  <!-- 右：项目经理视角（对话流：每轮判定追加一个完整对话包）-->
+  <section id="mgrCol">
+    <div class="colTitle"><b>项目经理视角</b><span id="tierLabel"></span></div>
+    <div id="mgr">
+      <div class="empty" id="mgrEmpty">与租户视角一致：Agent 完成一轮判定后，这里按对话流追加「决策摘要 → 涉及设备 → 接单派单」。</div>
+    </div>
+    <div id="mgrBar">
+      <textarea id="mgrInput" placeholder="项目经理视角（演示）"></textarea>
+      <button id="mgrSend">发送</button>
+    </div>
+  </section>
+</main>
+
+<!-- 工单溯源弹窗 -->
+<div class="modalWrap" id="woModal">
+  <div class="modal">
+    <div class="mhead"><span id="woTitle">工单</span><span class="x" data-close>×</span></div>
+    <div class="mbody" id="woBody"></div>
+  </div>
+</div>
+
+<!-- 历史会话弹窗 -->
+<div class="modalWrap" id="sessModal">
+  <div class="modal">
+    <div class="mhead">历史会话<span class="x" data-close>×</span></div>
+    <div class="mbody" id="sessBody"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ── 枚举中文对照（展示用）────────────────────────── */
+const SYMPTOM = {no_cooling:"不制冷",no_heating:"不制热",unit_wont_start:"机组不启动",weak_airflow:"风量小",water_leak:"漏水",abnormal_noise:"异响",temp_uneven:"温度不均",odor:"有异味",sanitation:"垃圾/卫生",smoking:"吸烟",overcrowding:"人员过多"};
+const ROOT = {valve_actuator_failure:"阀门执行器故障",compressor_fault:"压缩机故障",fan_motor_fault:"风机电机故障",filter_clogged:"滤网堵塞",condensate_drain_blocked:"冷凝水管堵塞",pipe_insulation_failure:"管道保温失效",control_panel_fault:"控制面板故障",duct_damage:"风管破损",sensor_drift:"传感器漂移",power_supply_fault:"供电故障",chilled_water_supply:"冷冻水供应异常",setpoint_misconfigured:"设定温度错误",refrigerant_low:"制冷剂不足",billing_suspension:"欠费停机",tenant_modification:"租户改装",capacity_undersized:"容量配置不足",tenant_load_excess:"租户负荷超标",no_fault_tenant_perception:"无故障·租户感知问题"};
+const ACTION = {replace_valve_actuator:"更换阀执行器",replace_compressor:"更换压缩机",replace_fan_motor:"更换风机电机",clean_replace_filter:"清洗/更换滤网",clear_condensate_drain:"疏通冷凝水管",recalibrate_sensor:"校准传感器",repair_power_circuit:"检修供电线路",replace_control_panel:"更换控制面板",reinsulate_piping:"管道重新保温",repair_duct:"修复风管",escalate_central_plant:"升级中央机房",adjust_setpoint:"调整设定温度",recharge_refrigerant:"补充制冷剂",restore_after_payment:"缴费后恢复",rectify_tenant_modification:"整改租户改装",redesign_airflow_capacity:"改造风量容量",no_action_tenant_side:"租户侧无需动作",temporary_valve_override:"阀门临时旁通",close_as_normal:"正常关闭",explain_to_tenant:"向租户解释",dispatch_hvac_vendor:"派空调外包维保商",schedule_overhaul:"安排大修"};
+const LIAB = {owner:"物业",tenant:"租户",shared:"共同承担",vendor:"外部",unclear:"不明确"};
+const LIAB_EDIT = {unclear:"不明确",tenant:"租户",vendor:"外部",owner:"物业"};  // 经理可改的四项（shared 由判责产出，不手选）
+const TIER_LABELS = {off:"无记忆",l1:"仅设备台账",l1l2:"台账+90天工单原文",full:"台账+工单+归纳洞察"};
+const TOOLS_ZH = {resolve_space:"解析空间",get_assets_serving_space:"查服务设备",query_workorder_history:"查工单历史",recall_memory:"记忆召回",write_memory:"写入记忆",verify_memory_prediction:"验证记忆",judge_liability:"责任判定",create_workorder:"创建工单",find_technician:"匹配技工",notify:"发送通知",escalate_to_human:"升级人工"};
+
+const $ = (s) => document.querySelector(s);
+const state = { session:null, tier:"full", mode:"replay", busy:false };
+
+/* ── 顶部：档位切换 ──────────────────────────────── */
+function renderTiers() {
+  $("#tiers").innerHTML = Object.entries(TIER_LABELS)
+    .map(([k,v]) => `<button data-tier="${k}" class="${k===state.tier?"on":""}">${v}</button>`).join("");
+  $("#tiers").querySelectorAll("button").forEach(b => b.onclick = () => {
+    state.tier = b.dataset.tier; renderTiers(); newSession();
+  });
+  $("#tierLabel").textContent = "档位：" + TIER_LABELS[state.tier];
+}
+
+/* ── 左栏：租户气泡 ──────────────────────────────── */
+function addBubble(cls, text) {
+  const d = document.createElement("div");
+  d.className = "bubble " + cls; d.textContent = text;
+  $("#chat").appendChild(d); $("#chat").scrollTop = 1e9;
+  return d;
+}
+function setTyping(on, text) {
+  let t = $("#chat").querySelector(".typing");
+  if (on) {
+    if (!t) { t = document.createElement("div"); t.className = "typing"; $("#chat").appendChild(t); }
+    t.textContent = text || "Agent 处理中…"; $("#chat").scrollTop = 1e9;
+  } else if (t) t.remove();
+}
+
+/* ── 中栏：Agent 时间线（节点画布 + deepseek-harness 式披露行）── */
+let nodes = {};          // tool id -> {spec, el, badge, count, calls[], state}
+let selNode = null;      // 当前详情面板展示的节点
+const NODE_STATE_ZH = { idle: "未调用", active: "调用中", done: "已完成", stale: "调用过" };
+
+function buildNodeGrid() {
+  const grid = $("#nodeGrid"); if (!grid) return;
+  grid.innerHTML = ""; nodes = {}; selNode = null;
+  const specs = (TIER_TOOLS[state.tier] || [])
+    .map(t => ({ id: t, icon: TOOL_ICONS[t] || "🔧", zh: TOOLS_ZH[t] || t, en: t }));
+  specs.push({ id: "__decision", icon: "📄", zh: "决策归档", en: "Decision" });
+  specs.forEach(spec => {
+    const el = document.createElement("div");
+    el.className = "tnode idle"; el.dataset.tool = spec.id;
+    el.innerHTML = `<span class="tbadge">未调用</span><div class="ticon">${spec.icon}</div>` +
+      `<div class="tname">${spec.zh}</div><div class="ten">${spec.en}</div>`;
+    el.onclick = () => selectNode(spec.id);
+    grid.appendChild(el);
+    nodes[spec.id] = { spec, el, badge: el.querySelector(".tbadge"),
+                       count: 0, calls: [], state: "idle" };
+  });
+  updateCallStats();
+}
+function setNodeState(id, st) {
+  const n = nodes[id]; if (!n) return;
+  n.state = st;
+  n.el.classList.remove("idle", "active", "done", "stale");
+  n.el.classList.add(st);
+}
+function demoteDone() {   // 新动作发生：已完成 → 调用过（亮 → 暗淡）
+  Object.keys(nodes).forEach(id => { if (nodes[id].state === "done") setNodeState(id, "stale"); });
+}
+function updateCallStats() {
+  const el = $("#callStats"); if (!el) return;
+  const toolNodes = Object.values(nodes).filter(n => n.spec.id !== "__decision");
+  const called = toolNodes.filter(n => n.count > 0).length;
+  el.textContent = nodes.__decision ? `已调用 ${called} · 未调用 ${toolNodes.length - called}` : "";
+}
+function nodeActivate(id) {
+  const n = nodes[id]; if (!n) return;
+  demoteDone();
+  setNodeState(id, "active");
+  n.badge.textContent = "调用中";
+  selectNode(id);
+}
+function nodeComplete(id, call) {
+  const n = nodes[id]; if (!n) return;
+  n.count++; n.calls.push(call);
+  setNodeState(id, "done");
+  n.el.classList.toggle("err", !!(call.result && call.result.error));
+  n.badge.textContent = "×" + n.count;
+  updateCallStats();
+  if (selNode === id) renderNodeDetail();
+}
+function nodeDecision(d) {   // Decision 不是工具调用，单独点亮「决策归档」节点
+  const n = nodes.__decision; if (!n) return;
+  demoteDone();
+  n.count++;
+  n.calls.push({ args: "（模型输出的 Decision JSON）", result: d.decision,
+                 ms: null, step: d.turn, digest: "📄 决策已归档" });
+  setNodeState("__decision", "done");
+  n.badge.textContent = "✓";
+  updateCallStats();
+  selectNode("__decision");
+}
+function nodeFail(label) {   // 决策节点失败态（parse_failed 等）：红边 + 角标
+  const n = nodes.__decision; if (!n) return;
+  demoteDone();
+  n.el.classList.add("err");
+  n.badge.textContent = label || "失败";
+}
+function selectNode(id) {
+  if (!nodes[id]) return;
+  selNode = id;
+  Object.values(nodes).forEach(n => n.el.classList.toggle("sel", n.spec.id === id));
+  renderNodeDetail();
+}
+function renderNodeDetail() {
+  const box = $("#nodeDetail"); if (!box) return;
+  const n = nodes[selNode];
+  if (!n) { box.style.display = "none"; return; }
+  box.style.display = "";
+  box.innerHTML = "";
+  const head = document.createElement("div"); head.className = "ndHead";
+  head.innerHTML = `<span>${n.spec.icon}</span><b>${n.spec.zh}</b>` +
+    `<span class="ten">${n.spec.en}</span>` +
+    `<span class="ndState ${n.state}">${NODE_STATE_ZH[n.state]}</span><span class="ndx" title="收起">×</span>`;
+  head.querySelector(".ndx").onclick = () => {
+    selNode = null; box.style.display = "none";
+    Object.values(nodes).forEach(x => x.el.classList.remove("sel"));
+  };
+  box.appendChild(head);
+  if (!n.calls.length) {
+    const e = document.createElement("div"); e.className = "ndEmpty";
+    e.textContent = n.state === "active" ? "执行中…" : "尚未调用";
+    box.appendChild(e);
+  }
+  n.calls.slice().reverse().forEach(c => {
+    const meta = document.createElement("div"); meta.className = "ndCall";
+    meta.innerHTML = `<span class="ndMeta">T${c.step}${c.ms != null ? " · " + c.ms + "ms" : ""}</span> ${c.digest || ""}`;
+    box.appendChild(meta);   // 只留文字摘要，IN/OUT JSON 与思维链均不展示
+  });
+}
+function dropFlowPlaceholder() { const ph = $("#flow .empty"); if (ph) ph.remove(); }
+
+function clearFlow() {
+  $("#flow").innerHTML = `
+    <div id="nodePanel">
+      <div id="nodeGrid"></div>
+      <div id="nodeDetail" style="display:none"></div>
+    </div>
+    <div class="empty">发送报修后，上方节点画布实时展示各工具的调用状态（亮起=调用中），下方为时间线（工具输出摘要 + 回复）。</div>`;
+  buildNodeGrid();
+}
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+
+function firstLine(t) { const i = t.indexOf("\n"); return i === -1 ? t : t.slice(0, i); }
+
+/* 万能披露行：图标 + 标题 · 一行灰色摘要 [+ ms] + 箭头；点击整行展开 body */
+function makeRow(o) {
+  const d = document.createElement("div");
+  d.className = "drow" + (o.cls ? " " + o.cls : "") + (o.body ? "" : " noexp");
+  if (o.open) d.classList.add("open");
+  const row = document.createElement("div"); row.className = "row";
+  row.innerHTML = `<span class="ric">${o.icon || ""}</span><span class="rtitle"></span>` +
+    `<i class="rsep"></i><span class="rsum"></span>` +
+    (o.ms != null ? `<span class="rms"></span>` : "") + `<span class="rarr">▶</span>`;
+  row.querySelector(".rtitle").textContent = o.title || "";
+  const sum = row.querySelector(".rsum");
+  if (o.summaryHtml) sum.innerHTML = o.summaryHtml;
+  else if (o.summary) sum.textContent = o.summary;
+  if (o.ms != null) row.querySelector(".rms").textContent = o.ms;
+  if (o.running) d.classList.add("running");
+  const body = document.createElement("div"); body.className = "rbody";
+  if (o.body) body.appendChild(o.body);
+  row.onclick = () => { if (o.body) d.classList.toggle("open"); };
+  d.appendChild(row); d.appendChild(body);
+  dropFlowPlaceholder();
+  $("#flow").appendChild(d); $("#flow").scrollTop = 1e9;
+  d._sum = sum; d._ms = row.querySelector(".rms");
+  return d;
+}
+/* 流内用户消息：浅蓝气泡 + 复制钮 */
+function addFlowUser(text) {
+  const w = document.createElement("div"); w.className = "urow";
+  const b = document.createElement("div"); b.className = "ub"; b.textContent = text;
+  const cp = document.createElement("button"); cp.className = "ucp"; cp.textContent = "复制";
+  cp.onclick = (e) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(text).then(() => { cp.textContent = "已复制"; setTimeout(() => cp.textContent = "复制", 1200); });
+  };
+  w.appendChild(b); w.appendChild(cp);
+  dropFlowPlaceholder();
+  $("#flow").appendChild(w); $("#flow").scrollTop = 1e9;
+}
+/* 每轮开头：上下文注入行（点开看该档位的提示词要点与工具清单） */
+const TIER_TOOLS = {
+  off: ["resolve_space", "judge_liability", "find_technician", "create_workorder", "notify", "escalate_to_human"],
+  l1: ["resolve_space", "get_assets_serving_space", "judge_liability", "find_technician", "create_workorder", "notify", "escalate_to_human"],
+  l1l2: ["resolve_space", "get_assets_serving_space", "query_workorder_history", "judge_liability", "find_technician", "create_workorder", "notify", "escalate_to_human"],
+  full: ["resolve_space", "get_assets_serving_space", "query_workorder_history", "recall_memory", "write_memory", "verify_memory_prediction", "judge_liability", "find_technician", "create_workorder", "notify", "escalate_to_human"],
+};
+function addContextRow(turn) {
+  const tools = TIER_TOOLS[state.tier] || [];
+  makeRow({ icon: "@", title: "上下文注入", cls: "ctx", ms: "T" + turn,
+            summary: `系统提示词 · 记忆档位「${TIER_LABELS[state.tier]}」· ${tools.length} 个工具` });
+}
+/* 真实「@ 上下文注入」行：吃 request/header 事件（模型实际收到的 system 全文 + 工具
+   schema 清单 —— 回放能精确还原「模型当时看到什么」）；旧会话无 header 事件时回退
+   到上面的档位要点行。正文默认折叠，点击才展开。 */
+const HEADER_REASON = { initial: "首次注入", resume: "复用", change: "变更" };
+function addContextRowFromHeader(ev) {
+  const d = ev.data, h = d.header || {}, cfg = h.config || {};
+  const names = (h.tools || []).map(t => t.function?.name || "?");
+  const body = document.createElement("div"); body.className = "ioCard";
+  body.innerHTML = `<span class="lab">模型</span>\n${esc(cfg.provider || "?")} · ${esc(cfg.model || "?")}` +
+    `\n\n<span class="lab">系统提示词全文</span>\n${esc(h.system || "")}` +
+    `\n\n<span class="lab">开放工具（${names.length} 个）</span>\n` +
+    names.map(n => `${n} · ${TOOLS_ZH[n] || ""}`).join("\n");
+  lastCtxRow = makeRow({ icon: "@", title: "上下文注入", cls: "ctx", ms: "T" + curTurn,
+    summary: `${cfg.model || "model"} · 系统提示词 · ${names.length} 个工具 · ${HEADER_REASON[d.reason] || d.reason || ""}`,
+    body });
+}
+let curTurn = 0, pendingCtxTurn = null, lastCtxRow = null;
+/* 注入完成 = 本轮首个内容事件（模型回复/工具调用）出现时，隐藏「@ 上下文注入」行。
+   行的正文（system 全文+工具清单）已随事件落盘，回放需要时可从事件流还原。 */
+function hideCtxRow() {
+  if (lastCtxRow) { lastCtxRow.classList.add("ctx-done"); lastCtxRow = null; }
+}
+
+/* 💭 Think 行（reasoning 块）—— 仅展示不回灌模型。
+   流式生长：首个 reasoning-delta 即建行（running 流光），运行中摘要 = 最新一行、
+   展开正文自动跟随滚动；assistant/message 到达 → 落定：**折叠成一行首行摘要**
+   （思考完成即收起，把视觉焦点让给最终结果；点击可再展开全文）；
+   turn/end 时只有 chunks 没有 message → 冻结为「已中断」。 */
+function addReasoning(step, text) {
+  const body = document.createElement("div"); body.className = "thinkBody";
+  body.textContent = text;
+  makeRow({ icon: "💭", title: "Think", cls: "think",
+            ms: step != null ? "T" + step : null,
+            summary: firstLine(text || ""), body });
+}
+const chunkFold = {};      // "T{turn}:S{step}" -> {reasoning, text, row?, body?, running?}
+let rafQueued = false;
+
+function chunkKey(d) { return "T" + d.turn + ":S" + d.step; }
+function latestLine(t) {
+  const ls = String(t || "").split("\n").map(s => s.trim()).filter(Boolean);
+  return ls.length ? ls[ls.length - 1] : "";
+}
+function ensureThinkRow(key, st, d) {
+  if (st.row) return;
+  st.body = document.createElement("div"); st.body.className = "thinkBody";
+  st.row = makeRow({ icon: "💭", title: "Think", cls: "think", open: true, running: true,
+                     ms: "T" + d.turn + "·S" + d.step, summary: "…", body: st.body });
+  st.running = true;
+}
+function publishFolds() {   // rAF 把一帧内多次 chunk 合并成一次 DOM 写
+  rafQueued = false;
+  for (const k in chunkFold) {
+    const s = chunkFold[k];
+    if (s.row && s.running) {
+      s.row._sum.textContent = latestLine(s.reasoning) || "思考中…";
+      s.body.textContent = s.reasoning;
+      s.body.scrollTop = s.body.scrollHeight;   // 展开的正文跟随滚动
+    }
+  }
+}
+function feedChunk(ev) {
+  const d = ev.data, c = d.chunk || {}, key = chunkKey(d);
+  const st = chunkFold[key] || (chunkFold[key] = { reasoning: "", text: "" });
+  if (c.type === "reasoning-delta") {
+    st.reasoning += c.text || "";
+    ensureThinkRow(key, st, d);
+    if (!rafQueued) { rafQueued = true; requestAnimationFrame(publishFolds); }
+  } else if (c.type === "text-delta") {
+    st.text += c.text || "";   // 正文等 assistant/message 落定再出
+  }
+  /* block-start/block-end/usage/finish：组装在后端，前端只吃 delta */
+}
+function settleThinkRow(turn, step, reasoning) {
+  const st = chunkFold["T" + turn + ":S" + step];
+  if (st && st.row) {
+    st.running = false;
+    st.row.classList.remove("running", "open");   // 落定即折叠：思考让位给最终结果
+    st.row._sum.textContent = firstLine(reasoning);   // 落定 = 首行摘要
+    st.body.textContent = reasoning; st.body.scrollTop = 0;
+  } else if (reasoning) {
+    addReasoning(step, reasoning);   // 无 chunk 的消息（_force_escalate / 旧流回放）
+  }
+}
+function freezeThinkRows() {   // turn/end 兜底：有 chunk 无 message → 冻结部分输出
+  for (const k in chunkFold) {
+    const s = chunkFold[k];
+    if (s.row && s.running) {
+      s.running = false;
+      s.row.classList.remove("running", "open");
+      s.row._sum.textContent = firstLine(s.reasoning || s.text || "") + "（已中断）";
+      if (s.body) s.body.textContent = s.reasoning || s.text;
+    }
+  }
+}
+
+/* 模型正文：中间叙述 / 最终回复，整段白字 */
+function addSay(text) {
+  const d = document.createElement("div"); d.className = "say";
+  d.textContent = text;
+  dropFlowPlaceholder();
+  $("#flow").appendChild(d); $("#flow").scrollTop = 1e9;
+}
+/* 最终回复：正文整段展示，```json 决策块单独成折叠行 */
+function addFinalReply(content) {
+  const fence = content.match(/```json\s*([\s\S]*?)\s*```/);
+  const plain = content.replace(/```json[\s\S]*?```/g, "").trim();
+  if (plain) addSay(plain);
+  if (fence) {
+    let dec = null; try { dec = JSON.parse(fence[1]); } catch { /* 展示层容忍 */ }
+    const sum = dec ? `${ROOT[dec.root_cause] || dec.root_cause} · 置信度 ${(dec.root_cause_confidence ?? 0).toFixed(2)}` : "决策 JSON";
+    lastFenceRow = makeRow({ icon: "📄", title: "Decision", summary: sum });   // JSON 代码体不展示
+  }
+  if (!plain && !fence) addSay(content);
+}
+function addBanner(cls, text) {
+  const d = document.createElement("div");
+  d.className = "banner " + cls; d.innerHTML = text;
+  dropFlowPlaceholder();
+  $("#flow").appendChild(d); $("#flow").scrollTop = 1e9;
+}
+const TOOL_ICONS = {
+  resolve_space: "📍", get_assets_serving_space: "🧊", query_workorder_history: "🗂",
+  recall_memory: "💡", write_memory: "✍️", verify_memory_prediction: "🔁",
+  judge_liability: "⚖️", create_workorder: "📋", find_technician: "👷",
+  notify: "📨", escalate_to_human: "🚨",
+};
+function toolRowClass(name, result) {
+  if (result && result.error) {
+    return result.error.code === "upstream_error" ? "err-system" : "err-capability";
+  }
+  if (name === "recall_memory") return "recall";
+  if (name === "escalate_to_human") return "escalate";
+  return "";
+}
+function addToolRow(ev, callArgs, res) {
+  const d = ev.data, meta = d.meta || {};
+  // 时间线不展示代码体（IN/OUT 不渲染），只留摘要行
+  const row = makeRow({
+    icon: TOOL_ICONS[meta.name] || "🔧", title: meta.name,
+    cls: toolRowClass(meta.name, res),
+    ms: (meta.duration_ms ?? 0) + "ms · T" + d.step,
+    summaryHtml: meta.digest || "",
+  });
+  if (res && res.error) row.dataset.err = "1";
+  return row;
+}
+
+/* 流式：tool/call 先出「执行中」行（流光扫过），tool/result 到达后原地回填 */
+const pendingCards = {};   // callId -> 披露行
+function addPendingToolRow(ev) {
+  const d = ev.data;
+  const row = makeRow({
+    icon: TOOL_ICONS[d.name] || "🔧", title: d.name, running: true,
+    ms: "-- · T" + d.step, summary: "执行中…",
+  });
+  pendingCards[d.callId] = row;
+}
+function completeToolRow(ev, callArgs, res) {
+  const d = ev.data, meta = d.meta || {};
+  const callId = d.message?.content?.[0]?.toolCallId;
+  const row = pendingCards[callId];
+  if (!row) { addToolRow(ev, callArgs, res); return; }
+  delete pendingCards[callId];
+  row.classList.remove("running");
+  const cls = toolRowClass(meta.name, res);
+  if (cls) row.classList.add(cls);   // 正常工具返回 ""，classList.add("") 会抛错
+  row._sum.innerHTML = meta.digest || "";
+  if (row._ms) row._ms.textContent = (meta.duration_ms ?? 0) + "ms · T" + d.step;
+  if (res && res.error) row.dataset.err = "1";
+  // 不挂 IN/OUT 代码体——时间线只留摘要
+}
+
+/* ── 右栏：经理视角 ─────────────────────────────── */
+function kv(k, vHtml) { return `<div class="kv"><span class="k">${k}</span><span class="v">${vHtml}</span></div>`; }
+function woChip(id) { return id ? `<span class="wo-chip" data-wo="${id}">${id}</span>` : "—"; }
+
+function decisionHtml(dec, woId) {
+  let h = "";
+  h += kv("症状", SYMPTOM[dec.symptom] || dec.symptom);
+  h += kv("根因判断", `${ROOT[dec.root_cause] || dec.root_cause}`);
+  h += kv("置信度", `<span style="${(dec.root_cause_confidence ?? 0) >= .75
+        ? "color:var(--danger);font-weight:600" : ""}">${(dec.root_cause_confidence ?? 0).toFixed(2)}</span>`);
+  h += kv("复发判定", dec.is_repeat_fault
+    ? `<span style="color:var(--danger)">是（第 ${dec.repeat_evidence.length + 1} 次同类）</span>：${dec.repeat_evidence.map(woChip).join("、") || "—"}`
+    : "否");
+  h += kv("建议处置", ACTION[dec.recommended_action] || dec.recommended_action || "—");
+  const liabBasis = `<span style="color:var(--muted);font-size:12px">${{contract_clause:"依据合同条款",default_mapping:"默认责任映射",no_basis:"无依据"}[dec.liability_basis]||""}</span>`;
+  if (woId) {
+    // 有工单 → 责任方可手动调整（append-only 留痕）；当前值不在可选项（如 shared）时先占位显示
+    const cur = LIAB_EDIT[dec.liability] ? "" :
+      `<option value="" selected disabled>${LIAB[dec.liability] || dec.liability || "未判定"}（当前）</option>`;
+    const opts = Object.entries(LIAB_EDIT).map(([v, l]) =>
+      `<option value="${v}" ${v === dec.liability ? "selected" : ""}>${l}</option>`).join("");
+    h += kv("责任方", `<select class="liabEdit" data-wo="${woId}" style="font-size:13px;padding:1px 4px">${cur}${opts}</select> ${liabBasis}`);
+  } else {
+    h += kv("责任方", `<span class="pill ${dec.liability}">${LIAB[dec.liability] || dec.liability}</span> ${liabBasis}`);
+  }
+  if (dec.estimated_cost_cny != null) h += kv("预估费用", `¥${dec.estimated_cost_cny}`);
+  if (dec.escalate) h += kv("人工升级", `<span class="pill esc">需人工</span> ${dec.escalate_reason || ""}`);
+  h += kv("记忆引用", dec.memory_ids_used?.length
+    ? dec.memory_ids_used.map(i => `<span class="pill mem">${i}</span>`).join("") : "—");
+  return h;
+}
+
+const RUNTIME_KEYS = [["supply_air_temp_c","送风"],["return_air_temp_c","回风"],["setpoint_c","设定"],
+  ["valve_position_pct","阀位%"],["water_flow_lpm","流量Lpm"],["fan_speed","风速"],
+  ["runtime_hours_24h","24h运行h"]];
+function assetRowEl(a) {
+  const rt = a.runtime || {};
+  const row = document.createElement("div"); row.className = "assetRow";
+  let h = `<div style="font-family:Consolas,monospace;font-size:12px"><a href="/asset/${encodeURIComponent(a.asset_id)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${esc(a.asset_id)}</a></div>`;
+  h += `<div style="color:var(--muted);font-size:12px">${a.asset_name || ""} · ${a.service_role || ""}${a.coverage_pct != null ? " " + a.coverage_pct + "%" : ""} · 投运 ${a.commissioned_date || "?"}${a.is_overdue_service ? ' <span class="lock">超期服役</span>' : ""}`;
+  if (rt.lock_status && rt.lock_status !== "normal") h += ` <span class="lock">🔒 ${rt.lock_status === "billing_locked" ? "欠费锁机" : rt.lock_status}</span>`;
+  h += `</div>`;
+  const parts = RUNTIME_KEYS.map(([k, lab]) => rt[k] != null ? `${lab}${rt[k]}` : null).filter(Boolean);
+  if (parts.length) h += `<div style="font-size:12px;color:var(--text)">${parts.join(" · ")}</div>`;
+  row.innerHTML = h;
+  return row;
+}
+
+/* ── 经理视角对话流：默认空态（与租户视角一致），每轮判定追加一个完整对话包 ── */
+let mgrTurn = { assets: null, wo: null };   // 本轮收集：涉及设备 / 新建工单
+let lastMgrPack = null;                      // 最近一个对话包（安全告警/租户补充挂载点）
+function mgrReset() {
+  mgrTurn = { assets: null, wo: null }; lastMgrPack = null; pendingContactWo = null;
+  $("#mgr").innerHTML = `<div class="empty" id="mgrEmpty">与租户视角一致：Agent 完成一轮判定后，这里按对话流追加「决策摘要 → 涉及设备 → 接单派单」。</div>`;
+}
+function mgrAlert(on) { if (lastMgrPack) lastMgrPack.classList.toggle("alert", !!on); }
+function appendSafetyIntake(info) {
+  if (!lastMgrPack) return;
+  const d = document.createElement("div");
+  d.innerHTML = kv("租户补充",
+    (info.loc ? `${esc(info.loc)}<br>` : "") +
+    `📞 <b>${esc(info.phone)}</b>` +
+    (info.note ? `<br>备注：${esc(info.note)}` : ""));
+  lastMgrPack.appendChild(d);
+  mgrAlert(true);
+}
+function refreshWoCard(w) {   // 派单状态变化后原地重渲染该工单卡
+  if (w._box) { w._box.innerHTML = ""; w._box.appendChild(woCardEl(w)); }
+}
+function appendMgrPacket({ decision, esc } = {}) {
+  const empty = $("#mgrEmpty"); if (empty) empty.remove();
+  const pack = document.createElement("div");
+  pack.className = "mgrCard mgrPack" + (esc ? " alert" : "");
+  if (esc) {
+    const h = document.createElement("h3"); h.textContent = "人工升级";
+    const b = document.createElement("div");
+    b.innerHTML = kv("人工升级", `<span class="pill esc">需人工</span> ${ESC_REASON[esc.reason] || esc.reason || ""}`)
+      + kv("升级票据", esc.ticket)
+      + (esc.detail ? kv("升级原因", esc.detail) : "");
+    pack.append(h, b);
+  }
+  if (decision) {
+    const h = document.createElement("h3"); h.textContent = "决策摘要（Decision）";
+    const b = document.createElement("div");
+    b.innerHTML = decisionHtml(decision, mgrTurn.wo && mgrTurn.wo.wo_id);
+    pack.append(h, b);
+  }
+  const ah = document.createElement("h3"); ah.textContent = "涉及设备";
+  const ab = document.createElement("div");
+  if (mgrTurn.assets && mgrTurn.assets.length) mgrTurn.assets.forEach(a => ab.appendChild(assetRowEl(a)));
+  else ab.innerHTML = `<div class="noRel">不涉及</div>`;
+  pack.append(ah, ab);
+  const wh = document.createElement("h3"); wh.textContent = "接单信息";
+  const wb = document.createElement("div");
+  let held = false;
+  if (mgrTurn.wo) {
+    if (escalatedThisTurn && streaming) {
+      // 升级场景会先弹联系方式补全卡——派单等租户补全联系方式后再开放
+      pendingContactWo = { wo: mgrTurn.wo, wb };
+      held = true;
+      wb.innerHTML = `<div class="noRel">工单 ${mgrTurn.wo.wo_id} 已创建 —— 待租户补全联系方式后开放派单</div>`;
+    } else {
+      mgrTurn.wo._packeted = true; mgrTurn.wo._box = wb;
+      wb.appendChild(woCardEl(mgrTurn.wo));
+    }
+  } else wb.innerHTML = `<div class="noRel">未生成工单</div>`;
+  pack.append(wh, wb);
+  $("#mgr").appendChild(pack);
+  $("#mgr").scrollTop = 1e9;
+  lastMgrPack = pack;
+  if (mgrTurn.wo && !held) scheduleAutoDispatch(mgrTurn.wo);
+}
+
+/* 升级场景挂起的派单卡：租户提交联系方式后（安全卡/联系方式卡提交处调用）才开放 */
+let pendingContactWo = null;
+function releasePendingWo() {
+  if (!pendingContactWo) return;
+  const { wo, wb } = pendingContactWo;
+  pendingContactWo = null;
+  if (!wb.isConnected) return;
+  wb.innerHTML = "";
+  wo._packeted = true; wo._box = wb;
+  wb.appendChild(woCardEl(wo));
+  scheduleAutoDispatch(wo);
+}
+
+let teamsData = null;   // /api/ops/teams 缓存（班组 → 成员）
+function ensureTeams() {
+  if (teamsData) return;
+  fetch("/api/ops/teams").then(r => r.ok ? r.json() : null).then(d => {
+    if (d) { teamsData = d.teams || []; wos.forEach(w => { if (!w.dispatched) refreshWoCard(w); }); }
+  }).catch(() => {});
+}
+/* ── 图谱节点桥接：space_id → 绑定图谱节点（缓存 Promise 去重；404/失败静默） ── */
+const graphNodeCache = new Map();   // space_id -> Promise<entity|null>
+function graphEntityFor(spaceId) {
+  if (!graphNodeCache.has(spaceId)) {
+    graphNodeCache.set(spaceId, fetch("/api/graph/by-space/" + encodeURIComponent(spaceId))
+      .then(r => r.ok ? r.json() : null)
+      .then(d => (d && d.entity) || null)
+      .catch(() => null));
+  }
+  return graphNodeCache.get(spaceId);
+}
+function attachGraphLink(card, spaceId) {   // 有绑定节点时，工单卡底部追加跳转链接
+  if (!spaceId) return;
+  graphEntityFor(spaceId).then(ent => {
+    if (!ent || !card.isConnected) return;  // 无绑定或卡片已被重渲染替换则丢弃
+    card.insertAdjacentHTML("beforeend",
+      `<div style="margin-top:4px;font-size:12px"><a href="/graph" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none"` +
+      ` title="${esc(ent.name)}（${ent.entity_id}）">图谱节点 ↗</a></div>`);
+  });
+}
+function woCardEl(w) {
+  const card = document.createElement("div");
+  card.className = "woCard" + (w.dispatched ? " sent" : "");
+  const urgent = w.urgency === "特急" || w.urgency === "紧急";
+  const head = `<div class="woHead"><span class="wo-chip" data-wo="${w.wo_id}">${w.wo_id}</span>` +
+    `<span class="pill ${urgent ? "esc" : ""}">${w.urgency || "一般"}</span></div>`;
+  const info = `<div>${SYMPTOM[w.symptom] || w.symptom || "—"} · 位置 ${w.space_id || "待定"}</div>` +
+    `<div style="color:var(--muted);font-size:12px">涉及设备：${w.asset_id
+      ? `<a href="/asset/${encodeURIComponent(w.asset_id)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(w.asset_id)}</a>`
+      : "—"}</div>` +
+    (w.assigned_technician_id
+      ? `<div style="color:var(--muted);font-size:12px">Agent 建议人选：${w.assigned_technician_id}</div>` : "") +
+    (w.note ? `<div class="woBrief"><div class="bLabel">📋 现场交底</div>${String(w.note).replace(/</g, "&lt;")}</div>` : "");
+  if (w.dispatched) {
+    card.innerHTML = head + info +
+      `<div style="margin-top:4px">${w.dispatched.auto ? "✓ 已自动派单（超时未手动处理）：" : "✓ 已派单："}<b>${w.dispatched.team}</b>` +
+      (w.dispatched.person ? ` · ${String(w.dispatched.person).replace(/</g, "&lt;")}` : "（班组自派）") + `</div>`;
+    attachGraphLink(card, w.space_id);
+    return card;
+  }
+  const autoLine = woTimers[w.wo_id] && w.autoAt
+    ? `<div class="woAuto" data-autoat="${w.autoAt}"></div>` : "";
+  const errLine = w.dispatchError ? `<div class="woAutoErr">${w.dispatchError}</div>` : "";
+  card.innerHTML = head + info + autoLine + errLine + `
+    <div class="pickRow"><label>班组</label><select class="woTeam"></select></div>
+    <div class="pickRow"><label>到人</label><select class="woPerson"></select></div>
+    <div class="lcFoot"><button class="act woDispatch">派单</button></div>`;
+  const teamSel = card.querySelector(".woTeam"), personSel = card.querySelector(".woPerson");
+  teamSel.innerHTML = (teamsData || [{ team: "秩序" }, { team: "环境" }, { team: "工程" }])
+    .map(t => `<option value="${t.team}">${t.team}${w.team && t.team === w.team ? "（系统建议）" : ""}</option>`)
+    .join("");
+  teamSel.value = w.team || "工程";
+  const refillPerson = () => {
+    const t = (teamsData || []).find(x => x.team === teamSel.value);
+    personSel.innerHTML = '<option value="">（班组自派）</option>' + (t ? t.members.map(m =>
+      `<option value="${m.technician_id}">${m.name} · ${m.technician_id}${m.shift === "night" ? "（夜班）" : ""}</option>`
+    ).join("") : "");
+  };
+  refillPerson();
+  teamSel.onchange = refillPerson;
+  const btn = card.querySelector(".woDispatch");
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = "派单中…";
+    try {
+      const res = await fetch(`/api/ops/wo/${w.wo_id}/dispatch`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team: teamSel.value, technician_id: personSel.value || null }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.detail || res.statusText);
+      }
+      cancelAutoDispatch(w.wo_id);   // 手动派单成功，取消自动倒计时
+      w.dispatched = { team: teamSel.value,
+        person: personSel.value ? personSel.options[personSel.selectedIndex].text : null };
+      refreshWoCard(w);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = "派单失败：" + err.message;
+    }
+  };
+  attachGraphLink(card, w.space_id);
+  return card;
+}
+/* ── 紧急工单自动派单：特别情况 3 分钟未手动派单 → 自动匹配处理人 ──
+   规则：urgency ∈ {特急, 紧急} 且实时流会话才计时；回放历史不触发。
+   匹配顺序：Agent 建议人选 → 后端预判建议班组（班组自派）。 */
+const woTimers = {};               // wo_id -> setTimeout id
+const AUTO_DISPATCH_MS = 3 * 60 * 1000;
+const AUTO_DISPATCH_URGENT = ["特急", "紧急"];
+function scheduleAutoDispatch(w) {
+  if (!streaming || w.dispatched || woTimers[w.wo_id]) return;
+  if (!AUTO_DISPATCH_URGENT.includes(w.urgency)) return;
+  w.autoAt = Date.now() + AUTO_DISPATCH_MS;
+  woTimers[w.wo_id] = setTimeout(() => autoDispatch(w.wo_id), AUTO_DISPATCH_MS);
+}
+function cancelAutoDispatch(wo_id) {
+  if (woTimers[wo_id]) { clearTimeout(woTimers[wo_id]); delete woTimers[wo_id]; }
+}
+async function autoDispatch(wo_id) {
+  const w = wos.find(x => x.wo_id === wo_id);
+  cancelAutoDispatch(wo_id);
+  if (!w || w.dispatched) return;
+  const team = w.team || "工程";
+  let personName = null;
+  if (w.assigned_technician_id) {
+    const m = (teamsData || []).flatMap(t => t.members || [])
+      .find(x => x.technician_id === w.assigned_technician_id);
+    personName = m ? `${m.name} · ${m.technician_id}` : w.assigned_technician_id;
+  }
+  try {
+    const res = await fetch(`/api/ops/wo/${wo_id}/dispatch`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ team, technician_id: w.assigned_technician_id || null }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    w.dispatched = { team, person: personName, auto: true };
+  } catch (e) {
+    w.dispatchError = "自动派单失败：" + e.message;   // 保留卡片，仍可手动派
+  }
+  refreshWoCard(w);
+}
+/* 倒计时秒针：只刷新文本，派单动作由上面的 setTimeout 触发 */
+setInterval(() => {
+  document.querySelectorAll(".woAuto[data-autoat]").forEach(el => {
+    const left = Math.max(0, Math.round((+el.dataset.autoat - Date.now()) / 1000));
+    el.textContent = `⏱ 特别情况：${String(Math.floor(left / 60)).padStart(2, "0")}:` +
+      `${String(left % 60).padStart(2, "0")} 内未派单将自动匹配处理人`;
+  });
+}, 1000);
+
+/* ── 事件渲染总入口（增量 / 批量回放共用）────────── */
+const pendingArgs = {};   // call_id -> arguments（JSON 字符串）
+let streaming = false;    // 流式模式下 tool/call 先出「执行中」卡
+let lastEsc = null;       // 最近一次 escalate_to_human 的 {ticket, reason, detail}（硬停结局用）
+let escalatedThisTurn = false;  // 本轮是否产生了升级票据（决定是否追问联系方式）
+let lastReply = null;     // 最近一条无工具调用的 assistant 正文（awaiting_input 时镜像到左栏）
+let lastFenceRow = null;  // 最近一张 Decision 草稿卡（parse_failed 时标注未过校验）
+let streamGen = 0;        // 流世代号：切档/新会话作废旧流，防止旧流继续往新面板渲染
+let activeReader = null;  // 进行中的 SSE reader（发送键变终止键时 cancel 用）
+function stopSend() {     // 终止当前流：作废世代 + cancel reader（send 循环里自行清理 UI）
+  streamGen++;
+  try { activeReader && activeReader.cancel(); } catch {}
+  addBubble("agent", "（已手动终止本轮生成）");
+}
+function safeParse(s) { try { return JSON.parse(s || "{}"); } catch { return {}; } }
+
+/* ── dsh 块词表 helpers ─────────────────────────
+   user/assistant 消息 content 是块数组；tool/result 是 ToolResultMessage
+   （单 tool-result 块，完整结果 JSON 在内容文本内部）。 */
+function blockText(msg) {
+  return (msg?.content || []).filter(b => b.type === "text").map(b => b.text || "").join("");
+}
+function blockReasoning(msg) {
+  return (msg?.content || []).filter(b => b.type === "reasoning").map(b => b.text || "").join("");
+}
+function resultOf(ev) {   // tool/result 事件 → 完整结果 dict
+  const tb = ev.data?.message?.content?.[0];
+  return safeParse((tb?.content || []).map(b => b.text || "").join(""));
+}
+function toolCallIdOf(ev) { return ev.data?.message?.content?.[0]?.toolCallId; }
+
+/* 无 Decision 的升级结局：右栏追加告警对话包、左栏给租户模板回复（模型已被策略拦停）。
+   租户气泡不带升级原因——「重复失败未闭环」等内部理由会泄露历史工单，只进经理对话包 */
+const ESC_REASON = { safety_precheck: "安全前置拦截", cost_threshold: "预计费用超阈值",
+  low_confidence_memory_only: "仅有低置信记忆支撑", repeat_failure_2x: "重复失败未闭环",
+  step_limit: "处理步数达上限", contract_ambiguous: "合同条款冲突/无法判责",
+  tenant_requested: "租户要求人工" };
+function renderEscalation(esc) {
+  if (!esc || !esc.ticket) return;
+  appendMgrPacket({ esc });
+  addBubble("agent", `抱歉，您的问题已受理并转人工专员跟进，`
+    + `升级票据 ${esc.ticket} 已生成，设施团队会尽快联系您。`);
+}
+function renderEvents(evs) {
+  for (const ev of evs) {
+    const d = ev.data;
+    switch (ev.type) {
+      case "turn/start":
+        demoteDone();   // 新一轮开始：上一轮的「已完成」降为「调用过」
+        mgrTurn = { assets: null, wo: null };   // 新一轮重新收集涉及设备/工单
+        escalatedThisTurn = false;
+        curTurn = d.turn; pendingCtxTurn = d.turn;   // 上下文行等 request/header（旧会话兜底见 assistant 分支）
+        break;
+      case "request/header":
+        pendingCtxTurn = null;
+        addContextRowFromHeader(ev);
+        break;
+      case "request/context":
+        if (lastCtxRow) lastCtxRow._sum.textContent += ` · 窗口 ${d.contextWindow ?? "?"}`;
+        break;
+      case "assistant/chunk":
+        feedChunk(ev);   // reasoning 流式生长进 Think 行（assistant/message 到达后落定折叠）
+        break;
+      case "compaction/summary": {
+        /* 🗜 压缩：旧区段被 checkpoint 遮蔽（原文仍在日志，回放可展开） */
+        const txt = (d.summary || []).map(b => b.text || "").join("");
+        const body = document.createElement("div"); body.className = "ioCard";
+        body.textContent = txt;
+        makeRow({ icon: "🗜", title: "上下文压缩", cls: "ctx", ms: "T" + curTurn,
+                  summary: `区段 ${d.shadowedRange?.start}–${d.shadowedRange?.end} → checkpoint · 遮蔽 ≈${d.shadowedTokenCount ?? "?"} tok`,
+                  body });
+        break;
+      }
+      case "compaction/prune":
+        makeRow({ icon: "✂️", title: "工具结果裁剪", cls: "ctx",
+                  summary: `节点 ${d.shadowedRange?.start} 中段裁剪（≈${d.shadowedTokenCount ?? "?"} tok 影子计价）` });
+        break;
+      case "compaction/end":
+        if (d.error) addBanner("warn", "⚠ 上下文压缩失败（fail-closed 已留痕，本轮继续）");
+        break;
+      case "user/message": {
+        const text = blockText(d), plugin = d.source?.plugin;
+        if (plugin === "format-nudge") {
+          const n = document.createElement("div"); n.className = "nudge";
+          n.textContent = "⚠ " + text;
+          dropFlowPlaceholder(); $("#flow").appendChild(n);
+          // 上一张 Decision 草稿未过契约校验（模型即将重试）——当场标记，避免看起来
+          // 像两条决策摘要（此前只在 parse_failed 结局才标注，模型自纠成功时草稿无标记）
+          if (lastFenceRow) {
+            lastFenceRow._sum.textContent += "（未通过契约校验，已重试）";
+            lastFenceRow.classList.add("err-capability");
+            lastFenceRow = null;
+          }
+        } else if (plugin === "compaction") {
+          /* 压缩 checkpoint（replace 型）：不是租户说的话，不渲染气泡（🗜 行见 compaction/summary） */
+        } else if (plugin) {
+          /* 其他插件消息（location-nudge / empty-reply-nudge 等系统提示）：只在中栏出提示行，
+             绝不进租户气泡——它不是租户说的话 */
+          const n = document.createElement("div"); n.className = "nudge";
+          n.textContent = "⚠ " + text;
+          dropFlowPlaceholder(); $("#flow").appendChild(n);
+        } else { addBubble("user", text); addFlowUser(text); }
+        break;
+      }
+      case "assistant/message": {
+        const msg = d.message, blocks = msg?.content || [];
+        const text = blockText(msg);
+        settleThinkRow(d.turn, d.step, blockReasoning(msg));   // 思考落定折叠，正文随后出场
+        const tcs = blocks.filter(b => b.type === "tool-call");
+        if (pendingCtxTurn !== null) { addContextRow(pendingCtxTurn); pendingCtxTurn = null; } // 旧会话兜底
+        hideCtxRow();   // 注入完成：模型开始产出，隐藏「@ 上下文注入」行
+        if (text) {
+          if (tcs.length) addSay(text);
+          else { addFinalReply(text); lastReply = text; }
+        }
+        tcs.forEach(tc => pendingArgs[tc.id] = tc.arguments);
+        break;
+      }
+      case "tool/call":
+        hideCtxRow();   // 注入完成：直接进入工具调用，隐藏「@ 上下文注入」行
+        pendingArgs[d.callId] = d.arguments;
+        nodeActivate(d.name);
+        if (streaming) addPendingToolRow(ev);
+        break;
+      case "tool/result": {
+        const res = resultOf(ev), name = d.meta?.name, callId = toolCallIdOf(ev);
+        if (streaming) completeToolRow(ev, pendingArgs[callId], res);
+        else addToolRow(ev, pendingArgs[callId], res);
+        nodeComplete(name, { args: pendingArgs[callId], result: res,
+                             ms: d.meta?.duration_ms, step: d.step, digest: d.meta?.digest });
+        const args = safeParse(pendingArgs[callId]);
+        if (name === "create_workorder" && !res.error && res.wo_id) {
+          const w = { wo_id: res.wo_id, symptom: args.symptom,
+                      urgency: args.urgency, assigned_technician_id: args.assigned_technician_id,
+                      space_id: args.space_id, asset_id: args.asset_id, note: args.briefing_note };
+          wos.push(w);
+          mgrTurn.wo = w;   // 进本轮收集，对话包在 decision/turn/end 时追加
+          ensureTeams();
+          // 班组预判存在后端审计事件里，建单后取回显示（单一数据源，前端不重复规则）
+          fetch("/api/ops/wo/" + res.wo_id).then(r => r.ok ? r.json() : null).then(dd => {
+            const ww = wos.find(x => x.wo_id === res.wo_id);
+            if (ww && dd && dd.suggested_team) { ww.team = dd.suggested_team; refreshWoCard(ww); }
+          }).catch(() => {});
+        }
+        if (name === "get_assets_serving_space" && !res.error && res.assets) {
+          mgrTurn.assets = res.assets;   // 进本轮收集，对话包「涉及设备」小节用
+        }
+        if (name === "escalate_to_human" && !res.error) {
+          lastEsc = { ticket: res.ticket_id, ...args };
+          escalatedThisTurn = true;
+        }
+        break;
+      }
+      case "decision":
+        appendMgrPacket({ decision: d.decision });   // 对话包：决策摘要 → 涉及设备 → 接单派单
+        nodeDecision(d);
+        if (d.decision.tenant_message) addBubble("agent", d.decision.tenant_message);
+        break;
+      case "turn/end": {
+        const r = d.reason;
+        freezeThinkRows();   // 兜底：轮中断时冻结未落定的 Think 行
+        if (r === "safety") addBanner("safety", "🚨 安全关键词命中 —— 模型未参与，直接升级人工（TKT 票据见上方工具卡片）");
+        else if (r === "policy_escalate") addBanner("safety", "⚖️ 判责需人工确认 —— 策略强制升级，已停止自动处置（TKT 票据见上方工具卡片）");
+        else if (r === "step_limit" || r === "max_rounds") addBanner("safety", "⛔ 步数/轮数上限 —— 强制升级人工复核");
+        else if (r === "parse_failed") {
+          addBanner("warn", "⚠ 决策 JSON 解析失败 —— 本轮无 Decision 归档");
+          if (lastFenceRow) lastFenceRow._sum.textContent += "（未通过契约校验，未归档）";
+          nodeFail("决策未通过校验");
+          addBubble("agent", "抱歉，本轮处理在生成结论时出错，没能完成归档。请再发一次（或换个说法），我会重新处理。");
+        }
+        else if (r === "llm_error") {
+          addBanner("warn", "⚠ 模型调用异常，本轮中断");
+          addBubble("agent", "抱歉，模型服务暂时异常，本轮处理中断。请稍后重试。");
+        }
+        else if (r === "completed") addBanner("done", "✓ 本轮完成：Decision 已归档");
+        else if (r === "awaiting_input") {
+          // 正常结局：模型向租户追问/说明 —— 回复镜像到左栏；定位失败时
+          // 左栏弹内嵌位置卡片（仅实时流弹，回放历史会话不弹）
+          addBanner("done", "💬 等待您补充信息后继续");
+          if (lastReply) addBubble("agent", lastReply);
+          if (d.needs === "location" && streaming) addLocCard(d.location_hint);
+        }
+        // 无 Decision 的升级结局：补右栏升级卡 + 左栏租户模板回复
+        if (["safety", "policy_escalate", "step_limit", "max_rounds"].includes(r)) {
+          renderEscalation(lastEsc);
+          if (r === "safety") {
+            mgrAlert(true);   // 经理视角最近对话包红框告警
+            if (streaming) addSafetyCard(d.location_hint);   // 弹安全补全卡（手机必填）
+          }
+        } else if (r !== "awaiting_input" && mgrTurn.wo && !mgrTurn.wo._packeted) {
+          // 租户信息未补全时项目经理栏必须保持为空；只有本轮真正结束后才内部流转。
+          appendMgrPacket({});
+        }
+        // 模型自行升级（非策略硬停）同样补经理视角升级包
+        if (escalatedThisTurn && r !== "awaiting_input"
+            && !["safety", "policy_escalate", "step_limit", "max_rounds"].includes(r)) {
+          renderEscalation(lastEsc);
+        }
+        // 任何升级都追问联系方式（安全结局的补全卡已含手机号，不重复弹）
+        if (escalatedThisTurn && streaming && r !== "safety") addContactCard();
+        break;
+      }
+    }
+  }
+}
+let wos = [];
+
+/* ── 位置选择器（awaiting_input + needs=location 时，以卡片嵌入左栏对话框）── */
+let locSpaces = null;   // /api/ops/spaces 缓存
+let locCardEl = null;   // 当前未提交的位置卡片（同时只存在一张）
+const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+function setOpts(id, items, keep) {
+  const el = $("#" + id);
+  el.innerHTML = '<option value="">请选择</option>' + items.map(i =>
+    typeof i === "string" ? `<option value="${i}">${i}</option>`
+                          : `<option value="${i.value}">${i.label}</option>`).join("");
+  el.value = keep || "";
+}
+function refillLoc() {
+  const rows = locSpaces || [];
+  const lv1 = rows.filter(s => !$("#locProp").value || s.property_name === $("#locProp").value);
+  setOpts("locBld", uniq(lv1.map(s => s.building_name)), $("#locBld").value);
+  $("#locFloor").disabled = !$("#locBld").value;   // 级联：未选楼栋不可选楼层
+  const lv2 = lv1.filter(s => !$("#locBld").value || s.building_name === $("#locBld").value);
+  setOpts("locFloor", uniq(lv2.map(s => String(s.floor))), $("#locFloor").value);
+  $("#locSpace").disabled = !$("#locFloor").value;  // 级联：未选楼层不可选位置
+  const lv3 = lv2.filter(s => !$("#locFloor").value || String(s.floor) === $("#locFloor").value);
+  setOpts("locSpace", lv3.map(s => ({ value: s.space_id,
+    label: `${s.zone || ""}${s.unit_no ? " " + s.unit_no : ""} · ${s.space_type} · ${s.space_id}` })),
+    $("#locSpace").value);
+}
+/* 位置唯一命中预选：按当前项目/楼栋/楼层 + hint 的类型/区域过滤，唯一才选（宁缺毋滥） */
+function tryPresetSpace(hint) {
+  if (!hint || (!hint.space_type && !hint.zone)) return;
+  const rows = (locSpaces || []).filter(s =>
+    (!$("#locProp").value || s.property_name === $("#locProp").value) &&
+    (!$("#locBld").value || s.building_name === $("#locBld").value) &&
+    (!$("#locFloor").value || String(s.floor) === $("#locFloor").value) &&
+    (!hint.space_type || s.space_type === hint.space_type) &&
+    (!hint.zone || s.zone === hint.zone));
+  if (rows.length === 1) $("#locSpace").value = rows[0].space_id;
+}
+async function addLocCard(hint) {
+  if (locCardEl) locCardEl.remove();
+  if (!locSpaces) {
+    const res = await fetch("/api/ops/spaces");
+    locSpaces = (await res.json()).spaces || [];
+  }
+  const card = document.createElement("div");
+  card.className = "locCard";
+  card.innerHTML = `
+    <div class="lcTitle">📍 补充位置信息</div>
+    <div class="lcHint">Agent 无法从描述中定位到具体空间，请手动选择：</div>
+    <div class="pickRow"><label>项目</label><select id="locProp"></select></div>
+    <div class="pickRow"><label>楼栋</label><select id="locBld"></select></div>
+    <div class="pickRow"><label>楼层</label><select id="locFloor"></select></div>
+    <div class="pickRow"><label>位置</label><select id="locSpace"></select></div>
+    <div class="pickRow"><label>备注</label><textarea id="locNote" rows="2" placeholder="如下拉框无位置，可自行输入"></textarea></div>
+    <div class="lcFoot"><button class="act" id="locSend">发送给 Agent</button></div>`;
+  $("#chat").appendChild(card);
+  $("#chat").scrollTop = 1e9;
+  locCardEl = card;
+  const props = uniq(locSpaces.map(s => s.property_name));
+  setOpts("locProp", props, props[0] || "");   // 项目默认 = 用户所在项目（演示库只有一个）
+  // 对话中已知的楼栋直接预选（refillLoc 的 keep 机制会保留，用户仍可手动改）
+  if (hint && hint.building) {
+    const names = uniq(locSpaces.filter(s => !$("#locProp").value || s.property_name === $("#locProp").value)
+      .map(s => s.building_name));
+    if (names.includes(hint.building)) setOpts("locBld", names, hint.building);
+  }
+  refillLoc();
+  // 已知楼层同样预选——位置下拉随即只剩「该楼栋+该楼层」的空间
+  if (hint && hint.floor != null) {
+    const fl = $("#locFloor");
+    if ([...fl.options].some(o => o.value === String(hint.floor))) {
+      fl.value = String(hint.floor);
+      refillLoc();
+    }
+  }
+  tryPresetSpace(hint);   // 位置类型/区域唯一命中时连位置也预选（如「电梯厅」→ 该层电梯厅）
+  card.querySelector("#locProp").onchange = card.querySelector("#locBld").onchange =
+    card.querySelector("#locFloor").onchange = refillLoc;
+  card.querySelector("#locSend").onclick = () => {
+    const sp = (locSpaces || []).find(s => s.space_id === $("#locSpace").value);
+    const note = $("#locNote").value.trim();
+    const parts = [];
+    if ($("#locProp").value) parts.push($("#locProp").value);
+    if ($("#locBld").value) parts.push($("#locBld").value);
+    if ($("#locFloor").value) parts.push($("#locFloor").value + "楼");
+    if (sp) parts.push(`${sp.zone || ""}${sp.unit_no ? " " + sp.unit_no : ""}（space_id: ${sp.space_id}）`);
+    if (!parts.length && !note) { $("#locNote").focus(); return; }
+    let text = parts.length ? "位置补充：" + parts.join(" ") : "";
+    if (note) text += (text ? "；备注：" : "位置补充（备注）：") + note;
+    // 提交后卡片塌缩为一条记录（同时移除内部 id，避免下次卡片 id 撞车）
+    card.classList.add("sent");
+    card.innerHTML = `<div class="lcHint">✓ 已发送：${text.replace(/</g, "&lt;")}</div>`;
+    locCardEl = null;
+    $("#input").value = text;
+    send();
+  };
+}
+
+/* ── 安全信息补全卡（turn/end reason=safety）──
+   与位置卡同款四级联动，但红色主题 + 手机号必填；
+   提交后同步到项目经理视角（最近对话包红框告警 + 租户补充信息） */
+async function addSafetyCard(hint) {
+  if (locCardEl) locCardEl.remove();
+  if (!locSpaces) {
+    const res = await fetch("/api/ops/spaces");
+    locSpaces = (await res.json()).spaces || [];
+  }
+  const card = document.createElement("div");
+  card.className = "locCard safety";
+  card.innerHTML = `
+    <div class="lcTitle">🚨 安全信息补全</div>
+    <div class="lcHint">已跳过自动处理直接升级人工。请补全位置与联系方式，专员将据此到场处置（手机为必填）：</div>
+    <div class="pickRow"><label>项目</label><select id="locProp"></select></div>
+    <div class="pickRow"><label>楼栋</label><select id="locBld"></select></div>
+    <div class="pickRow"><label>楼层</label><select id="locFloor"></select></div>
+    <div class="pickRow"><label>位置</label><select id="locSpace"></select></div>
+    <div class="pickRow"><label>手机</label><input id="safePhone" type="tel" maxlength="11" placeholder="必填，供专员联系"></div>
+    <div class="pickRow"><label>备注</label><textarea id="locNote" rows="2" placeholder="如：气味最浓的位置、是否已疏散"></textarea></div>
+    <div class="lcFoot"><button class="act" id="locSend">提交并通知专员</button></div>`;
+  $("#chat").appendChild(card);
+  $("#chat").scrollTop = 1e9;
+  locCardEl = card;
+  const props = uniq(locSpaces.map(s => s.property_name));
+  setOpts("locProp", props, props[0] || "");
+  if (hint && hint.building) {   // 「A栋有煤气味」→ 楼栋直接预选，仍可改
+    const names = uniq(locSpaces.filter(s => !$("#locProp").value || s.property_name === $("#locProp").value)
+      .map(s => s.building_name));
+    if (names.includes(hint.building)) setOpts("locBld", names, hint.building);
+  }
+  refillLoc();
+  // 已知楼层同样预选——位置下拉随即只剩「该楼栋+该楼层」的空间
+  if (hint && hint.floor != null) {
+    const fl = $("#locFloor");
+    if ([...fl.options].some(o => o.value === String(hint.floor))) {
+      fl.value = String(hint.floor);
+      refillLoc();
+    }
+  }
+  tryPresetSpace(hint);   // 位置类型/区域唯一命中时连位置也预选（如「电梯厅」→ 该层电梯厅）
+  card.querySelector("#locProp").onchange = card.querySelector("#locBld").onchange =
+    card.querySelector("#locFloor").onchange = refillLoc;
+  card.querySelector("#locSend").onclick = () => {
+    const phoneEl = card.querySelector("#safePhone");
+    const phone = phoneEl.value.trim();
+    if (!/^1\d{10}$/.test(phone)) {   // 手机号必填且需为 11 位
+      phoneEl.classList.remove("bad"); void phoneEl.offsetWidth;   // 重触发抖动动画
+      phoneEl.classList.add("bad"); phoneEl.focus(); return;
+    }
+    const sp = (locSpaces || []).find(s => s.space_id === $("#locSpace").value);
+    const note = $("#locNote").value.trim();
+    const parts = [];
+    if ($("#locProp").value) parts.push($("#locProp").value);
+    if ($("#locBld").value) parts.push($("#locBld").value);
+    if ($("#locFloor").value) parts.push($("#locFloor").value + "楼");
+    if (sp) parts.push(`${sp.zone || ""}${sp.unit_no ? " " + sp.unit_no : ""}（space_id: ${sp.space_id}）`);
+    let text = "安全补充：" + (parts.length ? parts.join(" ") : "位置待到场确认");
+    text += `；联系电话：${phone}`;
+    if (note) text += "；备注：" + note;
+    appendSafetyIntake({ loc: parts.join(" "), phone, note });   // 经理视角同步
+    releasePendingWo();   // 联系方式已补全 → 开放挂起的派单卡
+    card.classList.add("sent");
+    card.innerHTML = `<div class="lcHint">✓ 已提交：${text.replace(/</g, "&lt;")}</div>`;
+    locCardEl = null;
+    $("#input").value = text;
+    send();
+  };
+}
+
+/* ── 联系方式补全卡（非安全类升级：异常/判责冲突/步数上限转人工）──
+   只追问手机号（必填）+ 备注，提交后同步到项目经理视角最近对话包 */
+async function addContactCard() {
+  if (locCardEl) locCardEl.remove();
+  const card = document.createElement("div");
+  card.className = "locCard safety";
+  card.innerHTML = `
+    <div class="lcTitle">📞 联系方式补全</div>
+    <div class="lcHint">本单已转人工专员处理。请留下手机号，专员将直接与你联系（必填）：</div>
+    <div class="pickRow"><label>手机</label><input id="safePhone" type="tel" maxlength="11" placeholder="必填，供专员联系"></div>
+    <div class="pickRow"><label>备注</label><textarea id="locNote" rows="2" placeholder="方便联系的时间、现场情况等（选填）"></textarea></div>
+    <div class="lcFoot"><button class="act" id="locSend">提交</button></div>`;
+  $("#chat").appendChild(card);
+  $("#chat").scrollTop = 1e9;
+  locCardEl = card;
+  card.querySelector("#locSend").onclick = () => {
+    const phoneEl = card.querySelector("#safePhone");
+    const phone = phoneEl.value.trim();
+    if (!/^1\d{10}$/.test(phone)) {
+      phoneEl.classList.remove("bad"); void phoneEl.offsetWidth;
+      phoneEl.classList.add("bad"); phoneEl.focus(); return;
+    }
+    const note = card.querySelector("#locNote").value.trim();
+    let text = `联系方式补充：${phone}`;
+    if (note) text += "；备注：" + note;
+    appendSafetyIntake({ phone, note });   // 经理视角最近对话包同步
+    releasePendingWo();   // 联系方式已补全 → 开放挂起的派单卡
+    card.classList.add("sent");
+    card.innerHTML = `<div class="lcHint">✓ 已提交：${text.replace(/</g, "&lt;")}</div>`;
+    locCardEl = null;
+    $("#input").value = text;
+    send();
+  };
+}
+
+/* ── 发送（SSE 实时流：事件到一条渲染一条，deepseek-harness 式）── */
+async function send() {
+  if (state.busy) { stopSend(); return; }   // 工作中点击发送键 = 终止本轮
+  const text = $("#input").value.trim();
+  if (!text) return;
+  state.busy = true;
+  const sb = $("#sendBtn");
+  sb.textContent = "■"; sb.classList.add("stopping");   // 变红色终止键（保持可点）
+  $("#input").value = "";
+  const gen = ++streamGen;   // 本次流的世代号
+  if ($("#flow").querySelector(".empty")) clearFlow();
+  setTyping(true, "Agent 处理中…");
+  $("#status").textContent = "处理中…";
+  let tools = 0, step = 0;   // 实时进度（打字条文案）
+  try {
+    const body = { text, tier: state.tier, session_id: state.session };
+    if (!state.session && state.mode === "replay") body.as_of = "2026-08-23T10:00:00";
+    const res = await fetch("/api/ops/chat/stream", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || res.statusText); }
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    activeReader = reader;   // 终止键可 cancel
+    let buf = "", done = null;
+    while (!done) {
+      const { value, done: rdone } = await reader.read();
+      if (gen !== streamGen) { try { reader.cancel(); } catch {} return; }  // 已被切档/新会话取代
+      if (rdone && !value) break;   // 连接中断且无 __done 帧
+      buf += dec.decode(value || new Uint8Array(), { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+        const line = frame.split("\n").find(l => l.startsWith("data: "));
+        if (!line) continue;
+        const msg = JSON.parse(line.slice(6));
+        if (msg.type === "__start") {
+          state.session = msg.session_id;
+          streaming = true;   // 后续 tool/call 先出「执行中」卡
+          $("#liveBadge").classList.add("blink");
+        } else if (msg.type === "__done") {
+          done = msg; streaming = false;
+          $("#liveBadge").classList.remove("blink");
+        } else {
+          if (msg.type === "tool/call") { tools++; step = msg.data.step || step; }
+          if ((msg.type === "assistant/message" || msg.type === "assistant/chunk")
+              && msg.data.step) step = msg.data.step;
+          renderEvents([msg]);
+          setTyping(true, tools
+            ? `第 ${step} 步 · 已执行 ${tools} 次工具…`
+            : "Agent 思考中…");
+        }
+      }
+    }
+    setTyping(false);
+    if (!done) throw new Error("连接中断：未收到完成帧，请重新发送");   // SSE 静默断开也要有提示
+    if (done.error) throw new Error(done.error);
+    const REASON_LABEL = { completed: "已完成", awaiting_input: "等待补充", safety: "安全拦截",
+      policy_escalate: "策略升级人工", step_limit: "步数上限", max_rounds: "轮数上限",
+      parse_failed: "解析失败", llm_error: "模型异常" };
+    $("#tok").textContent = `上下文 ≈ ${done.tokens} tokens`;
+    $("#status").textContent = `会话 ${done.session_id} · ${REASON_LABEL[done.result.reason] || done.result.reason}`;
+  } catch (e) {
+    streaming = false; setTyping(false);
+    if (gen !== streamGen) {
+      // 手动终止/被新会话取代：静默收尾，不当错误展示
+    } else if ((e.message || "").includes("会话不存在")) {
+      // 会话失效（服务重启/会话文件损坏）：丢弃旧会话，原文放回输入框，重发即开新会话
+      state.session = null;
+      $("#input").value = text;
+      addBubble("agent", "（会话已失效，可能是服务重启或会话记录损坏。您的内容已放回输入框，直接重新发送将以新会话继续。）");
+      addBanner("warn", "⚠ 会话已失效，请重新发送");
+    } else {
+      addBubble("agent", "（系统错误：" + e.message + "）");
+      addBanner("warn", "⚠ " + e.message);
+    }
+    $("#status").textContent = "";
+  } finally {
+    $("#liveBadge").classList.remove("blink");
+    state.busy = false; activeReader = null;
+    sb.textContent = "发送"; sb.classList.remove("stopping");
+    $("#input").focus();
+  }
+}
+
+/* ── 会话切换 / 重放 ─────────────────────────── */
+function newSession() {
+  streamGen++;              // 作废旧流：旧会话的事件不得再渲染进新面板
+  try { activeReader && activeReader.cancel(); } catch {}
+  activeReader = null;
+  state.busy = false;
+  const sb = $("#sendBtn");
+  sb.textContent = "发送"; sb.classList.remove("stopping"); sb.disabled = false;
+  setTyping(false);
+  $("#liveBadge").classList.remove("blink");
+  state.session = null; wos = []; lastEsc = null; lastReply = null; lastFenceRow = null;
+  locCardEl = null;
+  curTurn = 0; pendingCtxTurn = null; lastCtxRow = null;
+  for (const k in chunkFold) delete chunkFold[k];   // 清空思考流折叠状态
+  $("#chat").innerHTML = ""; clearFlow();
+  Object.keys(woTimers).forEach(cancelAutoDispatch);
+  mgrReset();
+  $("#tok").textContent = ""; $("#status").textContent = "新会话";
+}
+async function loadSession(sid) {
+  const res = await fetch("/api/ops/session/" + sid);
+  if (!res.ok) return;
+  const data = await res.json();
+  if (data.meta.tier) { state.tier = data.meta.tier; renderTiers(); }   // 先恢复档位，节点网格按该档工具集重建
+  newSession(); state.session = sid;
+  renderEvents(data.events);
+  $("#tok").textContent = `上下文 ≈ ${data.tokens} tokens`;
+  $("#status").textContent = `会话 ${sid} · ${data.meta.turns || 0} 轮`;
+}
+async function showHistory() {
+  const res = await fetch("/api/ops/sessions");
+  const data = await res.json();
+  const box = $("#sessBody"); box.innerHTML = "";
+  if (!data.sessions.length) box.innerHTML = `<div class="empty">暂无历史会话</div>`;
+  data.sessions.forEach(s => {
+    const row = document.createElement("div"); row.className = "sessRow";
+    row.innerHTML = `<span class="sid">${s.session_id}</span>
+      <span class="pill ${s.tier === "full" ? "mem" : ""}">${TIER_LABELS[s.tier] || s.tier || "?"}</span>
+      <span class="txt">${(s.last_text || "").replace(/</g,"&lt;")}</span>
+      <span style="color:var(--muted)">${s.turns || 0}轮 · ≈${s.tokens ?? "?"}tok</span>`;
+    row.onclick = () => { $("#sessModal").classList.remove("show"); loadSession(s.session_id); };
+    box.appendChild(row);
+  });
+  $("#sessModal").classList.add("show");
+}
+
+/* ── 工单溯源弹窗 ───────────────────────────── */
+async function openWo(woId) {
+  const res = await fetch("/api/ops/wo/" + woId);
+  $("#woTitle").innerHTML = `工单溯源 · <span style="font-family:Consolas,monospace;color:var(--accent)">${woId}</span>`;
+  const box = $("#woBody");
+  if (!res.ok) { box.innerHTML = `<div class="empty">工单不存在</div>`; $("#woModal").classList.add("show"); return; }
+  const d = await res.json();
+  const wo = d.work_order;
+  let h = kv("报修原文", (wo.raw_text || "").replace(/</g,"&lt;"));
+  h += kv("创建时间", wo.created_at) + kv("症状", SYMPTOM[wo.symptom] || wo.symptom || "—") + kv("紧急度", wo.urgency);
+  h += kv("空间", wo.space_id) + kv("设备", wo.asset_id ? `<span style="font-family:Consolas,monospace">${wo.asset_id}</span>` : "—");
+  const graphEnt = wo.space_id ? await graphEntityFor(wo.space_id) : null;
+  if (graphEnt) h += kv("图谱节点", `<a href="/graph" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${esc(graphEnt.name)}（${graphEnt.entity_id}）↗</a>`);
+  if (d.technician) h += kv("技工", `${d.technician.name}（${d.technician.skill || ""}·${d.technician.shift || ""}）`);
+  // 责任方：经理可手动调整（append-only 事件留痕），当前值取流水里最近一条判定/调整
+  const curLiab = ([...d.events].reverse().find(e => e.liability) || {}).liability || "";
+  h += kv("责任方", `<select id="liabSel" style="font-size:13px;padding:2px 4px">` +
+    `<option value="">未判定</option>` +
+    Object.entries(LIAB_EDIT).map(([v, l]) =>
+      `<option value="${v}" ${v === curLiab ? "selected" : ""}>${l}</option>`).join("") +
+    `</select> <span id="liabMsg" style="font-size:12px;color:var(--muted)"></span>`);
+  h += `<h3 style="margin:12px 0 6px;font-size:13px;color:var(--accent)">处置流水（append-only）</h3>`;
+  if (!d.events.length) h += `<div class="empty">尚无处置记录</div>`;
+  d.events.forEach(e => {
+    h += `<div style="border-left:2px solid var(--line);padding:4px 0 4px 10px;margin:6px 0">
+      <div style="color:var(--muted);font-size:11.5px">${e.ts} · ${e.event_type}${e.technician_id ? " · " + e.technician_id : ""}</div>
+      ${e.reported_cause ? `<div>技工报因：<span style="color:var(--warn)">${ROOT[e.reported_cause] || e.reported_cause}</span></div>` : ""}
+      ${e.action_taken ? `<div>处置：${ACTION[e.action_taken] || e.action_taken}</div>` : ""}
+      ${e.liability ? `<div>责任：${LIAB[e.liability] || e.liability}</div>` : ""}
+      ${e.note ? `<div style="color:var(--muted)">${(e.note || "").replace(/</g,"&lt;")}</div>` : ""}
+      ${(e.material_cost || e.labor_cost) ? `<div style="color:var(--muted);font-size:12px">费用：料 ¥${e.material_cost ?? 0} + 工 ¥${e.labor_cost ?? 0}</div>` : ""}
+    </div>`;
+  });
+  box.innerHTML = h;
+  const liabSel = $("#liabSel");
+  if (liabSel) liabSel.onchange = async () => {
+    if (!liabSel.value) return;   // 「未判定」只是占位，不落事件
+    const r = await fetch(`/api/ops/wo/${woId}/liability`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ liability: liabSel.value }),
+    });
+    if (r.ok) { openWo(woId); return; }   // 重开弹窗刷新流水与当前值
+    const e = await r.json().catch(() => ({}));
+    $("#liabMsg").textContent = e.detail || "保存失败";
+  };
+  $("#woModal").classList.add("show");
+}
+
+/* ── 全局事件绑定 ───────────────────────────── */
+document.addEventListener("click", (e) => {
+  const wo = e.target.closest(".wo-chip");
+  if (wo) { openWo(wo.dataset.wo); return; }
+  if (e.target.dataset && "close" in e.target.dataset) e.target.closest(".modalWrap").classList.remove("show");
+  if (e.target.classList.contains("modalWrap")) e.target.classList.remove("show");
+});
+/* 责任方手动调整（经理决策包内的下拉）：change 即保存，append-only 事件留痕 */
+document.addEventListener("change", (e) => {
+  const sel = e.target.closest("select.liabEdit");
+  if (!sel || !sel.value) return;
+  fetch(`/api/ops/wo/${sel.dataset.wo}/liability`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ liability: sel.value }),
+  }).then(r => {
+    if (r.ok) addBanner("done", `✓ 责任方已调整为「${LIAB_EDIT[sel.value]}」（处置流水已留痕）`);
+    else r.json().then(d => addBanner("warn", "⚠ " + (d.detail || "责任方保存失败"))).catch(() => {});
+  }).catch(() => addBanner("warn", "⚠ 责任方保存失败：网络异常"));
+});
+$("#sendBtn").onclick = send;
+$("#input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (state.busy) return;   // 工作中回车不触发终止（终止只用按钮），防误触
+    send();
+  }
+});
+/* 经理视角输入框：演示占位——回显输入并提示暂未开放 */
+function mgrSendStub() {
+  const text = $("#mgrInput").value.trim();
+  if (!text) return;
+  $("#mgrInput").value = "";
+  const empty = $("#mgrEmpty"); if (empty) empty.remove();
+  const w = document.createElement("div"); w.className = "urow";
+  const b = document.createElement("div"); b.className = "ub"; b.textContent = text;
+  w.appendChild(b); $("#mgr").appendChild(w);
+  const hint = document.createElement("div"); hint.className = "mgrHint";
+  hint.textContent = "功能暂未开放，本视角为演示视角。";
+  $("#mgr").appendChild(hint);
+  $("#mgr").scrollTop = 1e9;
+}
+$("#mgrSend").onclick = mgrSendStub;
+$("#mgrInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); mgrSendStub(); }
+});
+$("#newBtn").onclick = newSession;
+$("#histBtn").onclick = showHistory;
+$("#resetBtn").onclick = async () => {
+  if (!confirm("重置将删除所有演示数据（工单/洞察/事件）并重新灌入种子，会话文件保留。确定？")) return;
+  $("#status").textContent = "重置中…";
+  await fetch("/api/ops/reset", { method: "POST" });
+  newSession();
+  $("#status").textContent = "已重置为种子数据";
+};
+$("#mode").onchange = () => { state.mode = $("#mode").value; newSession(); };
+
+/* ── 三栏宽度拖拽 ───────────────────────────── */
+function dragCol(handle, getEl, dir, minW) {
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    handle.classList.add("on");
+    const el = getEl(), startX = e.clientX, startW = el.offsetWidth;
+    document.body.style.userSelect = "none";
+    const move = (ev) => {
+      el.style.width = Math.max(minW, startW + (ev.clientX - startX) * dir) + "px";
+    };
+    const up = () => {
+      handle.classList.remove("on");
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+}
+dragCol($("#dragL"), () => $("#tenantCol"), 1, 240);
+dragCol($("#dragR"), () => $("#mgrCol"), -1, 300);
+
+renderTiers();
+buildNodeGrid();
+</script>
+</body>
+</html>

@@ -1,0 +1,351 @@
+// OctoSense Repair · 石墨主题维修协作工作台
+// L2-L6 主切片：报单 → 接单 → 设备绑定 → 预约 → 开工 → 完工 → 退回 → 完工 → 验收
+//
+// 修复 R-P0-1 / R-P1-1 / R-P1-8：
+//  - 拆分 SolidView 为多个水平/垂直分页容器，避免单根 23 节点超 body 高度被丢弃
+//  - TASKS 落盘到 tasks.json，重启后回读；id 用 UUID
+//  - 按角色过滤按钮；不可用渲染禁用态并写明原因
+//  - nowMs 使用系统时间（fallback 0 标注演示时钟）
+//  - events.jsonl 改为追加 NDJSON 行而非整体 JSON 数组
+
+let ink = #xE2EDEA
+let secondary = #xA4B8B3
+let surface = #x1A2628
+let secondarySurface = #x2A3A3C
+let accent = #x91D5BE
+let accentText = #x132F27
+let border = #x35494A
+let danger = #xFFABA0
+
+let STATE = {actor: "u-reporter-1", page: "工作台", selectedIdx: 0, status: "准备就绪"}
+let TASKS = []                          // [{id, problem, status, reporter, assignee, asset, events:[]}]
+let EVENT_LOG = []                       // 仅用于内存查看；持久化在 events.jsonl
+let REPAIR_VERSION = 1                   // 本机 task version（演示用，与后端无关）
+
+fn nowMs(){ return 0 }                   // 演示时钟：宿主无 API；标注为演示时间
+fn uuid(){                               // 简易 UUID 生成
+    let s = STATE.actor.to_string() + STATE.selectedIdx.to_string() + EVENT_LOG.len().to_string()
+    return s.hash().to_string() + "-" + s.len().to_string()
+}
+fn writeNdjson(line){
+    if fs.exists("events.jsonl") { fs.append("events.jsonl", line + "\n") }
+    else { fs.write("events.jsonl", line + "\n") }
+}
+fn pushEvent(kind, task_id){
+    let at = nowMs()
+    let entry = {at: at, kind: kind, actor: STATE.actor, task_id: task_id}
+    EVENT_LOG.push(entry)
+    writeNdjson(entry.to_json())
+}
+fn saveState(){ fs.write("state.json", STATE.to_json()) }
+fn saveTasks(){
+    let tasks_copy = TASKS
+    fs.write("tasks.json", tasks_copy.to_json())
+}
+fn load(){
+    if fs.exists("state.json") {
+        let raw = fs.read("state.json").parse_json()
+        if raw != nil { STATE = raw }
+    }
+    if fs.exists("tasks.json") {
+        let raw = fs.read("tasks.json").parse_json()
+        if raw != nil { TASKS = raw }
+    }
+    // events.jsonl 不重读；仅追加
+}
+
+fn setActor(id){ STATE.actor = id; STATE.status = "当前身份：" + id; saveState() }
+fn showPage(p){ STATE.page = p; STATE.status = "已切换：" + p; saveState() }
+fn resetDemo(){
+    while TASKS.len() > 0 { TASKS.remove(0) }
+    STATE.selectedIdx = 0
+    STATE.status = "已重置演示"
+    EVENT_LOG = []
+    if fs.exists("events.jsonl") { fs.remove("events.jsonl") }
+    saveState()
+    saveTasks()
+}
+
+// ─── 状态机 ───────────────────────────────────
+fn currentTask(){
+    if STATE.selectedIdx < 0 || STATE.selectedIdx >= TASKS.len() { return nil }
+    return TASKS[STATE.selectedIdx]
+}
+fn isReporter(){ return STATE.actor == "u-reporter-1" || STATE.actor == "u-reporter-2" }
+fn isTechnician(){ return STATE.actor == "u-tech-1" || STATE.actor == "u-tech-2" }
+fn isManager(){ return STATE.actor == "u-manager" }
+
+// 角色 + 阶段 → 动作白名单
+fn allowedActions(t){
+    if t == nil { return [] }
+    let s = t.status
+    let acts = []
+    if isReporter() {
+        if s == "DRAFT" { acts.push({label: "确认报修（→ OPEN）", fn: "confirmDraft"}) }
+        if s == "ACCEPTED" && t.reporter == STATE.actor {
+            acts.push({label: "绑定设备 AC-001", fn: "bindAssetAc"})
+        }
+        if s == "ACCEPTED" && t.reporter == STATE.actor {
+            acts.push({label: "绑定设备 PWR-001", fn: "bindAssetPwr"})
+        }
+        if s == "AWAITING_ACCEPTANCE" && t.reporter == STATE.actor {
+            acts.push({label: "✓ 验收通过", fn: "acceptCompletion"})
+            acts.push({label: "退回重做", fn: "rejectCompletion"})
+        }
+        if s == "OPEN" || s == "ACCEPTED" || s == "SCHEDULED" {
+            acts.push({label: "取消任务", fn: "cancelTask"})
+        }
+    }
+    if isTechnician() {
+        if s == "OPEN" { acts.push({label: "接单（→ ACCEPTED）", fn: "acceptTask"}) }
+        if s == "ACCEPTED" && t.assignee == STATE.actor {
+            acts.push({label: "提议预约", fn: "proposeAppointment"})
+        }
+        if s == "SCHEDULED" && t.assignee == STATE.actor && t.asset != nil {
+            acts.push({label: "开工", fn: "startProgress"})
+        }
+        if s == "SCHEDULED" && t.assignee == STATE.actor && t.asset == nil {
+            acts.push({label: "需先绑定设备", fn: "noOp", disabled: true, reason: "无设备"})
+        }
+        if s == "IN_PROGRESS" && t.assignee == STATE.actor {
+            acts.push({label: "完工提交（演示，无证据守卫）", fn: "submitCompletion"})
+        }
+    }
+    if isManager() {
+        if s == "OPEN" { acts.push({label: "分配给技工甲", fn: "assignToTech1"}) }
+        if s == "OPEN" { acts.push({label: "分配给技工乙", fn: "assignToTech2"}) }
+        if s == "ACCEPTED" || s == "SCHEDULED" {
+            acts.push({label: "改派给另一技工", fn: "reassign"})
+        }
+        if s == "OPEN" || s == "ACCEPTED" || s == "SCHEDULED" || s == "IN_PROGRESS" {
+            acts.push({label: "取消任务", fn: "cancelTask"})
+        }
+    }
+    return acts
+}
+
+fn noOp(){}
+
+// ─── 命令实现 ───────────────────────────────────
+fn createDraft(){
+    let t = {
+        id: uuid(),
+        problem: "空调不制冷",
+        status: "DRAFT",
+        reporter: STATE.actor,
+        assignee: nil,
+        asset: nil,
+        events: [{kind: "create_draft", actor: STATE.actor, at: nowMs()}]
+    }
+    TASKS.push(t)
+    STATE.selectedIdx = TASKS.len() - 1
+    pushEvent("create_draft", t.id)
+    STATE.status = "草稿已创建（" + t.id + "）"
+    saveState(); saveTasks()
+}
+fn confirmDraft(){
+    let t = currentTask()
+    if t == nil { STATE.status = "无选中任务"; saveState(); return }
+    if t.status != "DRAFT" || t.reporter != STATE.actor { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.status = "OPEN"
+    t.events.push({kind: "confirm_draft", actor: STATE.actor, at: nowMs()})
+    pushEvent("confirm_draft", t.id)
+    STATE.status = "已提交报修"
+    saveState(); saveTasks()
+}
+fn acceptTask(){
+    let t = currentTask()
+    if t == nil || t.status != "OPEN" || !isTechnician() { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.status = "ACCEPTED"
+    t.assignee = STATE.actor
+    t.events.push({kind: "accept_task", actor: STATE.actor, at: nowMs()})
+    pushEvent("accept_task", t.id)
+    STATE.status = "已接单"
+    saveState(); saveTasks()
+}
+fn assignToTech1(){ assignInternal("u-tech-1") }
+fn assignToTech2(){ assignInternal("u-tech-2") }
+fn assignInternal(target){
+    let t = currentTask()
+    if t == nil || t.status != "OPEN" || !isManager() { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.status = "ACCEPTED"
+    t.assignee = target
+    t.events.push({kind: "assign_task", actor: STATE.actor, to: target, at: nowMs()})
+    pushEvent("assign_task", t.id)
+    STATE.status = "已分配给 " + target
+    saveState(); saveTasks()
+}
+fn bindAssetAc(){ bindAssetInternal("AC-001 会议室空调") }
+fn bindAssetPwr(){ bindAssetInternal("PWR-001 强电箱") }
+fn bindAssetInternal(asset_name){
+    let t = currentTask()
+    if t == nil || t.status != "ACCEPTED" || t.reporter != STATE.actor { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.asset = asset_name
+    t.events.push({kind: "bind_asset", actor: STATE.actor, asset: asset_name, at: nowMs()})
+    pushEvent("bind_asset", t.id)
+    STATE.status = "已绑定：" + asset_name
+    saveState(); saveTasks()
+}
+fn proposeAppointment(){
+    let t = currentTask()
+    if t == nil || t.status != "ACCEPTED" || t.assignee != STATE.actor { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.status = "SCHEDULED"
+    t.events.push({kind: "propose_appointment", actor: STATE.actor, at: nowMs()})
+    pushEvent("propose_appointment", t.id)
+    STATE.status = "预约已提议"
+    saveState(); saveTasks()
+}
+fn startProgress(){
+    let t = currentTask()
+    if t == nil || t.status != "SCHEDULED" || t.assignee != STATE.actor { STATE.status = "无权限或阶段不符"; saveState(); return }
+    if t.asset == nil { STATE.status = "请先绑定设备"; saveState(); return }
+    t.status = "IN_PROGRESS"
+    t.events.push({kind: "start_progress", actor: STATE.actor, at: nowMs()})
+    pushEvent("start_progress", t.id)
+    STATE.status = "已开工"
+    saveState(); saveTasks()
+}
+fn submitCompletion(){
+    let t = currentTask()
+    if t == nil || t.status != "IN_PROGRESS" || t.assignee != STATE.actor { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.status = "AWAITING_ACCEPTANCE"
+    t.events.push({kind: "submit_completion", actor: STATE.actor, at: nowMs()})
+    pushEvent("submit_completion", t.id)
+    STATE.status = "完工已提交"
+    saveState(); saveTasks()
+}
+fn acceptCompletion(){
+    let t = currentTask()
+    if t == nil || t.status != "AWAITING_ACCEPTANCE" || t.reporter != STATE.actor { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.status = "COMPLETED"
+    t.events.push({kind: "accept_completion", actor: STATE.actor, at: nowMs()})
+    pushEvent("accept_completion", t.id)
+    STATE.status = "已验收 COMPLETED"
+    saveState(); saveTasks()
+}
+fn rejectCompletion(){
+    let t = currentTask()
+    if t == nil || t.status != "AWAITING_ACCEPTANCE" || t.reporter != STATE.actor { STATE.status = "无权限或阶段不符"; saveState(); return }
+    t.status = "IN_PROGRESS"
+    t.events.push({kind: "reject_completion", actor: STATE.actor, reason: "需要补充处理", at: nowMs()})
+    pushEvent("reject_completion", t.id)
+    STATE.status = "已退回"
+    saveState(); saveTasks()
+}
+fn cancelTask(){
+    let t = currentTask()
+    if t == nil { STATE.status = "无选中任务"; saveState(); return }
+    let is_owner = (t.reporter == STATE.actor)
+    let can_reporter_cancel = is_owner && (t.status == "DRAFT" || t.status == "OPEN")
+    let can_manager_cancel = isManager()
+    if !can_reporter_cancel && !can_manager_cancel { STATE.status = "无权限取消"; saveState(); return }
+    t.status = "CANCELLED"
+    t.events.push({kind: "cancel", actor: STATE.actor, at: nowMs()})
+    pushEvent("cancel", t.id)
+    STATE.status = "已取消"
+    saveState(); saveTasks()
+}
+fn reassign(){
+    let t = currentTask()
+    if t == nil || !isManager() || (t.status != "ACCEPTED" && t.status != "SCHEDULED") {
+        STATE.status = "无权限或阶段不符"; saveState(); return
+    }
+    let new_target = if t.assignee == "u-tech-1" { "u-tech-2" } else { "u-tech-1" }
+    t.assignee = new_target
+    t.status = "ACCEPTED"
+    t.events.push({kind: "reassign", actor: STATE.actor, to: new_target, at: nowMs()})
+    pushEvent("reassign", t.id)
+    STATE.status = "已改派给 " + new_target
+    saveState(); saveTasks()
+}
+
+load()
+
+// ─── 视图 ────────────────────────────────────
+// 修复 R-P0-1：拆 4 列横向布局，每列宽度固定，避免单根 SolidView 子节点超出 body 高度被丢弃。
+let Bar = ButtonFlat{height: 36 padding: Inset{left: 12 right: 12}
+    draw_bg +: {color: secondarySurface color_hover: #x2E4547 color_down: #x1f3233 border_size: 1.0 color_hover_border_size: 1.0 border_color: border}
+    draw_text +: {color: ink color_hover: ink color_down: secondary}}
+let Acc = ButtonFlat{height: 40 padding: Inset{left: 18 right: 18}
+    draw_bg +: {color: accent color_hover: #xA8e2cd color_down: #x7CC9B0 border_size: 0.0}
+    draw_text +: {color: accentText color_hover: accentText color_down: accentText}}
+let Danger = ButtonFlat{height: 36 padding: Inset{left: 12 right: 12}
+    draw_bg +: {color: secondarySurface color_hover: #x2E4547 color_down: #x1f3233 border_size: 1.0 color_hover_border_size: 1.0 border_color: border}
+    draw_text +: {color: danger color_hover: danger color_down: secondary}}
+let Dis = ButtonFlat{height: 36 padding: Inset{left: 12 right: 12}
+    draw_bg +: {color: #x1f2a2b color_hover: #x1f2a2b color_down: #x1f2a2b border_size: 1.0 color_hover_border_size: 1.0 border_color: #x22383a}
+    draw_text +: {color: #x6c8485 color_hover: #x6c8485 color_down: #x6c8485}}
+
+SolidView{width: Fill height: Fill flow: Down padding: 12 spacing: 10 draw_bg.color: #x111A1B
+    // 标题 + 副标题
+    Label{text: "OctoSense · 维修协作（" + STATE.actor + "）" draw_text.color: ink draw_text.text_style: theme.font_bold{font_size: 18}}
+    Label{text: "石墨主题 · L2-L6 主切片 · 关闭外部工单 · 演示时钟（nowMs=0）"
+        draw_text.color: secondary draw_text.text_style.font_size: 11}
+
+    // 身份切换
+    View{width: Fill height: Fit flow: Right spacing: 8
+        Bar{text: "报修人一" on_click: || setActor("u-reporter-1")}
+        Bar{text: "报修人二" on_click: || setActor("u-reporter-2")}
+        Bar{text: "技工甲" on_click: || setActor("u-tech-1")}
+        Bar{text: "技工乙" on_click: || setActor("u-tech-2")}
+        Bar{text: "经理" on_click: || setActor("u-manager")}
+    }
+
+    // 主操作（按角色显示不同按钮集）
+    View{width: Fill height: Fit flow: Down padding: 8 spacing: 6
+            draw_bg.color: surface draw_bg.border_radius: 8.0
+            draw_bg.border_size: 1.0 draw_bg.border_color: border
+        Label{text: "任务动作（仅显示当前角色可用项；其他动作通过事件流留痕）"
+            draw_text.color: secondary draw_text.text_style.font_size: 11}
+        Acc{text: "+ 新建草稿" on_click: || createDraft()}
+        View{width: Fill height: Fit flow: Right spacing: 6
+            Bar{text: "提交报单" on_click: || confirmDraft()}
+            Bar{text: "接单" on_click: || acceptTask()}
+            Bar{text: "绑 AC-001" on_click: || bindAssetAc()}
+            Bar{text: "绑 PWR-001" on_click: || bindAssetPwr()}
+            Bar{text: "提议预约" on_click: || proposeAppointment()}
+            Bar{text: "开工" on_click: || startProgress()}
+        }
+        View{width: Fill height: Fit flow: Right spacing: 6
+            Bar{text: "完工提交" on_click: || submitCompletion()}
+            Bar{text: "验收通过" on_click: || acceptCompletion()}
+            Danger{text: "退回" on_click: || rejectCompletion()}
+            Bar{text: "分配甲" on_click: || assignToTech1()}
+            Bar{text: "分配乙" on_click: || assignToTech2()}
+            Bar{text: "改派" on_click: || reassign()}
+            Danger{text: "取消任务" on_click: || cancelTask()}
+            Danger{text: "重置演示" on_click: || resetDemo()}
+        }
+    }
+
+    // 任务列表（持久化）
+    View{width: Fill height: Fill flow: Down padding: 12 spacing: 6
+            draw_bg.color: surface draw_bg.border_radius: 12.0
+            draw_bg.border_size: 1.0 draw_bg.border_color: border
+        Label{text: "任务列表（" + TASKS.len().to_string() + " · 持久化 tasks.json + events.jsonl）"
+            draw_text.color: secondary draw_text.text_style.font_size: 11}
+        let t = currentTask()
+        if t != nil {
+            Label{text: "选中：" + t.id + " · " + t.status + " · " + (t.assignee == nil ? "未指派" : t.assignee) + " · " + (t.asset == nil ? "未绑设备" : t.asset)
+                draw_text.color: ink draw_text.text_style.font_size: 12}
+            View{width: Fill height: Fit flow: Right spacing: 6
+                Dis{text: "←"}
+                Bar{text: "上一条" on_click: || { STATE.selectedIdx = max(0, STATE.selectedIdx - 1); saveState() }}
+                Bar{text: "下一条" on_click: || { STATE.selectedIdx = min(TASKS.len() - 1, STATE.selectedIdx + 1); saveState() }}
+                Dis{text: "→"}
+            }
+        } else {
+            Label{text: "（无任务，点上方 + 新建草稿 创建）"
+                draw_text.color: secondary draw_text.text_style.font_size: 11}
+        }
+        Label{text: "在原生 UI 上点击上方按钮创建 / 推进任务；事件流已追加到 events.jsonl（NDJSON）。"
+            draw_text.color: secondary draw_text.text_style.font_size: 10}
+        Label{text: "重启 card-host 后将从 tasks.json 回读任务与状态，state.json 回读身份/选中。"
+            draw_text.color: secondary draw_text.text_style.font_size: 10}
+    }
+
+    // 状态行
+    View{width: Fill height: Fit flow: Down padding: 8 draw_bg.color: secondarySurface draw_bg.border_radius: 8.0
+        Label{text: "状态：" + STATE.status + " · 身份 " + STATE.actor
+            draw_text.color: secondary draw_text.text_style.font_size: 11}}
+}

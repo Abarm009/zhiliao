@@ -1,0 +1,12 @@
+{
+  "capabilities": [
+    "storage"
+  ],
+  "id": "octosense-repair",
+  "integrity": {
+    "bundle_blake3": "c066a517776438e1e4593f3f106f6a5ba24c5eb6668be7e18a2bded4bdbbaf82"
+  },
+  "name": "OctoSense Repair",
+  "schema": 1,
+  "version": "0.1.0"
+}
