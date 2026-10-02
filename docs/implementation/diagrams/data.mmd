@@ -1,0 +1,12 @@
+erDiagram
+  repair_projects ||--o{ repair_tasks : contains
+  repair_tasks }o--o| repair_assets : binds
+  repair_tasks ||--o{ repair_appointments : schedules
+  repair_tasks ||--o{ repair_actions : executes
+  repair_tasks ||--o{ repair_events : changes
+  repair_tasks ||--o{ repair_completions : finishes
+  repair_completions ||--o{ repair_acceptances : verifies
+  repair_completions ||--o{ repair_completion_attachments : evidence
+  repair_attachments ||--o{ repair_completion_attachments : referenced
+  repair_tasks ||--o{ repair_agent_runs : reasons
+  repair_tasks ||--o{ repair_external_exports : exports

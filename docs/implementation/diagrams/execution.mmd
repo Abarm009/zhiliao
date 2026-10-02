@@ -1,0 +1,26 @@
+sequenceDiagram
+  actor User as 授权用户
+  participant Host as 原生控件和权限broker
+  participant API as 后端会话与命令API
+  participant Exec as 统一命令执行器
+  participant DB as SQLite repair.db
+  User->>Host: 确认接单或预约动作
+  Host->>API: Bearer + Idempotency-Key + expected_version + payload
+  API->>Exec: 可信actor与项目范围
+  Exec->>DB: BEGIN IMMEDIATE
+  Exec->>DB: 检查幂等键和请求摘要
+  alt 同键同请求已处理
+    DB-->>Exec: 原回执（不重复执行）
+  else 新请求
+    Exec->>DB: 读取当前任务版本、承接者、状态
+    Note over Exec,DB: accept_task只允许一个承接者
+    Note over Exec,DB: confirm_appointment核验提议有效期和同技工半开区间冲突
+    Exec->>DB: 写任务/预约 + action + event + 通知记录
+    Exec->>DB: COMMIT（异常则全部ROLLBACK）
+    DB-->>Exec: action_id / task_version / event_seq
+  end
+  Exec-->>API: 原回执或新回执
+  API-->>Host: 200回执或明确的4xx错误
+  Host->>API: GET最新角色化任务投影
+  API-->>Host: 服务器事实与allowed_actions
+  Note over Host,DB: 断线/响应丢失用同键核对；不在本地假设成功

@@ -1,0 +1,55 @@
+%% 图 1 · 系统与模块依赖（设计交接图，不是已实现功能）
+%% 命名与范围基准：docs/implementation/00_DECISIONS.md
+%% 图例：现有=迁移保留；待实现=本轮新增；外部预留=默认未接通
+flowchart TB
+  subgraph HOST["robrix2 桌面宿主（官方发布包，版本待核对）· 待实现"]
+    NATIVE["原生维修小程序<br/>Rust + Makepad + 固定 Octoscript L0 界面<br/>比赛主交付 UI，宿主内窗口"]
+    BROKER["宿主权限 broker<br/>能力声明 / 权限询问 / 受控会话凭据<br/>须扩展宿主，未验证"]
+  end
+
+  API["后端受控会话 / 命令 API（HTTP + SSE，待实现）<br/>会话身份由服务端建立；卡片不直连数据库与旧写接口"]
+  IDENT["身份与授权（待实现）<br/>服务器会话 · REPORTER / TECHNICIAN / MANAGER / SYSTEM · 项目与技能范围"]
+
+  APP["任务应用服务 application/（待实现）<br/>任务生命周期与版本、预约、设备绑定、完工验收、任务投影"]
+  CONTRACT["任务协议与投影 task_contracts/（待实现）<br/>事件输入、任务读取、动作提交、验收提交、卡片投影"]
+
+  AGENT["Agent 推理与记忆检索（复用现有 ops/agent、llm/）<br/>模型只提建议，事实来自工具与数据库"]
+  MODEL["模型服务（外部，必须真实配置）<br/>OpenAI 兼容接口或本地推理"]
+
+  EXEC["统一命令执行边界（待实现）· 唯一业务副作用入口<br/>身份/范围校验 · 前置状态校验 · 幂等键 · 版本冲突 · 回执 · 状态与事件同事务"]
+  DOMAIN["旧契约/历史查询保留；新仓储 repair_data/ 待实现<br/>ops/tools/ · ops/data/ · ops/contracts/"]
+  DB[("SQLite 单库 runtime/repair.db<br/>新增 repair_* 任务/预约/设备/事件表")]
+  EVENTS[("任务事件与卡片投影（待实现）<br/>动作记录 + 事件序号 + 游标")]
+  SCHED["持久化调度器 SYSTEM（待实现）<br/>提议到期 / 预约提醒 / 待验收；仅执行已编码动作"]
+  LEGACY["旧 Web 页面与旧 runner（迁移保留，回归入口）<br/>比赛运行模式下写入口须先接入统一边界"]
+  EXT["外部预留（默认未接通）<br/>外部工单 NOT_CONFIGURED · OctoSense SDK 未安装 · 短信/企微/系统通知未接通"]
+
+  NATIVE --> BROKER
+  BROKER -->|凭据 / 受控会话| API
+  API --> IDENT
+  IDENT --> APP
+  IDENT --> CONTRACT
+  APP --> AGENT
+  AGENT --> EXEC
+  APP --> EXEC
+  CONTRACT --> EXEC
+  AGENT -.->|真实模型调用，需配置| MODEL
+  EXEC --> DOMAIN
+  DOMAIN --> DB
+  EXEC --> EVENTS
+  EVENTS -.->|投影读取| CONTRACT
+  SCHED -.->|写入同一边界| EXEC
+  LEGACY -.->|写入口须收敛| EXEC
+  EXT -.->|禁用适配器 / 版本化契约| EXEC
+
+  classDef now fill:#eef4ff,stroke:#2f6fdb,stroke-width:2px
+  classDef todo fill:#fff8e6,stroke:#c8871a,stroke-width:2px,stroke-dasharray:10 6
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,stroke-dasharray:2 6
+  classDef data fill:#eaf7ef,stroke:#1f8a4c,stroke-width:2px
+  classDef gate fill:#fdeeee,stroke:#c0392b,stroke-width:2px
+  class LEGACY now
+  class NATIVE,DOMAIN todo
+  class APP,CONTRACT,API,IDENT,SCHED,EVENTS todo
+  class MODEL,EXT ext
+  class DB data
+  class EXEC,BROKER gate

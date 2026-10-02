@@ -1,0 +1,3407 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Repair Task Collaboration — proposed v1",
+    "version": "1.0.0-design",
+    "description": "Design contract only. No endpoints have been implemented by this handoff. This is not an official OctoSense API. Local task truth; external work orders NOT_CONFIGURED."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8711",
+      "description": "Planned local development service; not started by this package"
+    }
+  ],
+  "security": [
+    {
+      "CookieSession": []
+    },
+    {
+      "HostSession": []
+    }
+  ],
+  "paths": {
+    "/api/tasks/v1/auth/login": {
+      "post": {
+        "operationId": "post_auth_login",
+        "summary": "演示账号登录；限速，安全cookie，密码哈希",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "org_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "username": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "username",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/tasks/v1/auth/logout": {
+      "post": {
+        "operationId": "post_auth_logout",
+        "summary": "撤销当前Web会话",
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "security": [
+          {
+            "CookieSession": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/me": {
+      "get": {
+        "operationId": "get_me",
+        "summary": "可信身份、项目角色及Web CSRF",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/v1/host/pairings": {
+      "post": {
+        "operationId": "post_host_pairings",
+        "summary": "同机原生broker发起120秒配对；限速与app允许名单",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingCreated"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "app_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "app_digest": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "instance_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "app_id",
+                  "app_digest",
+                  "instance_id",
+                  "display_name"
+                ]
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/tasks/v1/host/pairings/{id}/approve": {
+      "post": {
+        "operationId": "post_host_pairings_id_approve",
+        "summary": "Web当前用户明确批准配对",
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "user_code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{8}$"
+                  }
+                },
+                "required": [
+                  "user_code"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "CookieSession": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/host/pairings/{id}/poll": {
+      "post": {
+        "operationId": "post_host_pairings_id_poll",
+        "summary": "持poll_secret原子领取一次性host会话",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingPollResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "poll_secret": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "poll_secret"
+                ]
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/tasks/v1/host/session/revoke": {
+      "post": {
+        "operationId": "post_host_session_revoke",
+        "summary": "撤销当前host会话",
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "security": [
+          {
+            "HostSession": []
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/projects": {
+      "get": {
+        "operationId": "get_projects",
+        "summary": "当前用户项目",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Project"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/v1/projects/{project_id}/spaces": {
+      "get": {
+        "operationId": "get_projects_project_id_spaces",
+        "summary": "项目可见服务空间",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Space"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/projects/{project_id}/technicians": {
+      "get": {
+        "operationId": "get_projects_project_id_technicians",
+        "summary": "经理可分配技工与技能",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Technician"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/assets": {
+      "get": {
+        "operationId": "get_assets",
+        "summary": "设备搜索；q可为编码或asset:载荷",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Asset"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 256
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/assets/{asset_id}": {
+      "get": {
+        "operationId": "get_assets_asset_id",
+        "summary": "授权设备身份详情",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/tasks": {
+      "post": {
+        "operationId": "post_tasks",
+        "summary": "幂等创建本地DRAFT",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateDraftResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "Reuse for network retries of the same logical request; scope org+actor."
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDraft"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_tasks",
+        "summary": "角色化分页任务；同一任务不重复造卡",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskList"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "mine",
+                "open",
+                "assigned",
+                "project"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 30
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/tasks/{task_id}": {
+      "get": {
+        "operationId": "get_tasks_task_id",
+        "summary": "当前角色的任务投影",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskProjection"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/tasks/{task_id}/commands": {
+      "post": {
+        "operationId": "post_tasks_task_id_commands",
+        "summary": "执行受控业务命令；统一版本/权限/幂等/事务",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionReceipt"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "Reuse for network retries of the same logical request; scope org+actor."
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCommand"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/v1/tasks/{task_id}/attachments": {
+      "post": {
+        "operationId": "post_tasks_task_id_attachments",
+        "summary": "上传任务证据；校验类型/归属/上限",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/v1/attachments/{attachment_id}": {
+      "get": {
+        "operationId": "get_attachments_attachment_id",
+        "summary": "鉴权后返回文件；不公开storage_key",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/tasks/{task_id}/pin": {
+      "put": {
+        "operationId": "put_tasks_task_id_pin",
+        "summary": "设置本人收藏，不修改task.version",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "pinned": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "pinned"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "pinned": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "pinned"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/v1/tasks/{task_id}/agent-runs": {
+      "post": {
+        "operationId": "post_tasks_task_id_agent_runs",
+        "summary": "入库有限模型运行；不直接改变任务阶段",
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/v1/agent-runs/{run_id}": {
+      "get": {
+        "operationId": "get_agent_runs_run_id",
+        "summary": "任务权限约束下读取模型结果",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/events": {
+      "get": {
+        "operationId": "get_events",
+        "summary": "可见任务变更SSE；游标过旧发送reset提示并全量回读",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "event: task.changed; id: global_seq; data: {task_id,task_version}. Heartbeat carries no business state. event: reset triggers full authorized snapshot."
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "after_seq",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ]
+      }
+    },
+    "/api/tasks/v1/notifications": {
+      "get": {
+        "operationId": "get_notifications",
+        "summary": "当前用户站内通知",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  },
+                  "maxItems": 100
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/v1/notifications/{notification_id}/read": {
+      "post": {
+        "operationId": "post_notifications_notification_id_read",
+        "summary": "本人标记已读，重复操作幂等",
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "description": "Typed failure; HTTP status and retry semantics in 04_DATA_API.md",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "notification_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "description": "Required for cookie-authenticated writes; also enforce Origin. Not required for native Bearer calls."
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "CookieSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "repair_session"
+      },
+      "HostSession": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Short-lived app-instance-bound session held only by native broker"
+      }
+    },
+    "schemas": {
+      "TaskStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "OPEN",
+          "ACCEPTED",
+          "SCHEDULED",
+          "IN_PROGRESS",
+          "AWAITING_ACCEPTANCE",
+          "COMPLETED",
+          "CANCELLED"
+        ]
+      },
+      "SyncState": {
+        "type": "string",
+        "enum": [
+          "NOT_CONFIGURED",
+          "PENDING",
+          "SUCCEEDED",
+          "FAILED",
+          "UNKNOWN"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "error",
+          "request_id"
+        ]
+      },
+      "Project": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "REPORTER",
+                "TECHNICIAN",
+                "MANAGER"
+              ]
+            },
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "roles"
+        ]
+      },
+      "UserSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "id",
+          "display_name"
+        ]
+      },
+      "Me": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            },
+            "maxItems": 100
+          },
+          "csrf_token": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user",
+          "projects"
+        ]
+      },
+      "Space": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "code",
+          "name",
+          "active"
+        ]
+      },
+      "Technician": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 30
+          }
+        },
+        "required": [
+          "user",
+          "project_id",
+          "skills"
+        ]
+      },
+      "Source": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "DEMO",
+              "LOCAL_IMPORT",
+              "EXTERNAL_SNAPSHOT",
+              "LOCAL_TASK"
+            ]
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "captured_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "kind",
+          "ref",
+          "captured_at_ms"
+        ]
+      },
+      "Asset": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "asset_code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "installation_space_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "served_space_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 100
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "qr_payload": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "asset_code",
+          "display_name",
+          "category",
+          "active",
+          "source",
+          "served_space_ids",
+          "qr_payload"
+        ]
+      },
+      "Appointment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "technician_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "start_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "end_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PROPOSED",
+              "CONFIRMED",
+              "REJECTED",
+              "EXPIRED",
+              "SUPERSEDED",
+              "CANCELLED"
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "technician_id",
+          "start_at_ms",
+          "end_at_ms",
+          "expires_at_ms",
+          "version",
+          "status"
+        ]
+      },
+      "AllowedAction": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "disabled_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "enabled",
+          "disabled_reason"
+        ]
+      },
+      "TimelineEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "event_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "task_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "actor_label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "created_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "seq",
+          "event_id",
+          "task_version",
+          "type",
+          "actor_label",
+          "summary",
+          "created_at_ms"
+        ]
+      },
+      "Attachment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "original_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "media_type": {
+            "type": "string",
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "application/pdf"
+            ]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "download_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "original_name",
+          "media_type",
+          "size_bytes",
+          "sha256",
+          "download_url"
+        ]
+      },
+      "Completion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "resolution": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "actual_root_cause": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            },
+            "maxItems": 10
+          },
+          "author": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "created_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "resolution",
+          "actual_root_cause",
+          "attachments",
+          "author",
+          "created_at_ms"
+        ]
+      },
+      "Acceptance": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "completion_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "REJECTED"
+            ]
+          },
+          "actor": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "on_behalf": {
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "completion_id",
+          "outcome",
+          "actor",
+          "on_behalf",
+          "created_at_ms"
+        ]
+      },
+      "TaskProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "task_no": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "raw_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "symptom": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "HVAC_NOT_COOLING",
+                  "WATER_LEAK",
+                  "ELECTRICAL",
+                  "OTHER"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "space": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Space"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "asset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Asset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reporter": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contact_detail": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requested_start_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requested_end_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmed_appointment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Appointment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposed_appointment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Appointment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineEvent"
+            },
+            "maxItems": 100
+          },
+          "latest_completion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Completion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_acceptance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Acceptance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "external_sync_state": {
+            "$ref": "#/components/schemas/SyncState"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allowed_actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllowedAction"
+            },
+            "maxItems": 30
+          },
+          "next_actor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_pinned": {
+            "type": "boolean"
+          },
+          "server_time_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "updated_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "last_event_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "task_id",
+          "task_no",
+          "project_id",
+          "status",
+          "version",
+          "raw_text",
+          "reporter",
+          "asset",
+          "assignee",
+          "external_sync_state",
+          "external_id",
+          "allowed_actions",
+          "server_time_ms",
+          "last_event_seq"
+        ]
+      },
+      "ActionReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUCCEEDED"
+            ]
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "task_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "event_seq": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "projection_url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "action_id",
+          "status",
+          "task_id",
+          "task_version",
+          "event_seq",
+          "projection_url"
+        ]
+      },
+      "CreateDraft": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "raw_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "source_event_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "space_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "asset_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "previous_task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "project_id",
+          "raw_text"
+        ]
+      },
+      "CreateDraftResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "receipt": {
+            "$ref": "#/components/schemas/ActionReceipt"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskProjection"
+          }
+        },
+        "required": [
+          "receipt",
+          "task"
+        ]
+      },
+      "TaskList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskProjection"
+            },
+            "maxItems": 100
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ]
+      },
+      "UpdateDraftCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "update_draft"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "raw_text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "space_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "symptom": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "HVAC_NOT_COOLING",
+                      "WATER_LEAK",
+                      "ELECTRICAL",
+                      "OTHER"
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "contact_name": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "contact_detail": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requested_start_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requested_end_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "minProperties": 1
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "SubmitReportCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "submit_report"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "AcceptTaskCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "accept_task"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "AssignTaskCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "assign_task"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "technician_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "technician_id",
+              "reason"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "BindAssetCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "bind_asset"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "asset_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "evidence_kind": {
+                "type": "string",
+                "enum": [
+                  "REGISTRY_SELECTION",
+                  "ON_SITE_CODE"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "asset_id",
+              "evidence_kind",
+              "reason"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "ProposeAppointmentCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "propose_appointment"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "start_at_ms": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "end_at_ms": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "start_at_ms",
+              "end_at_ms"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "ConfirmAppointmentCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "confirm_appointment"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "appointment_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "appointment_id"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "RejectAppointmentCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "reject_appointment"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "appointment_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "appointment_id",
+              "reason"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "StartWorkCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "start_work"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "AddProgressCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "add_progress"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "INSPECTION",
+                  "REPAIR",
+                  "WAITING_PARTS",
+                  "NOTE"
+                ]
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "attachment_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "maxItems": 10
+              }
+            },
+            "required": [
+              "kind",
+              "note"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "SubmitCompletionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "submit_completion"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "resolution": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "actual_root_cause": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "attachment_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "maxItems": 10,
+                "minItems": 1,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "resolution",
+              "actual_root_cause",
+              "attachment_ids"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "AcceptCompletionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "accept_completion"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "completion_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "completion_id"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "RejectCompletionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "reject_completion"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "completion_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "completion_id",
+              "reason"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "CancelTaskCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "cancel_task"
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "reason"
+            ]
+          }
+        },
+        "required": [
+          "type",
+          "expected_version",
+          "payload"
+        ]
+      },
+      "TaskCommand": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UpdateDraftCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SubmitReportCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AcceptTaskCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AssignTaskCommand"
+          },
+          {
+            "$ref": "#/components/schemas/BindAssetCommand"
+          },
+          {
+            "$ref": "#/components/schemas/ProposeAppointmentCommand"
+          },
+          {
+            "$ref": "#/components/schemas/ConfirmAppointmentCommand"
+          },
+          {
+            "$ref": "#/components/schemas/RejectAppointmentCommand"
+          },
+          {
+            "$ref": "#/components/schemas/StartWorkCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AddProgressCommand"
+          },
+          {
+            "$ref": "#/components/schemas/SubmitCompletionCommand"
+          },
+          {
+            "$ref": "#/components/schemas/AcceptCompletionCommand"
+          },
+          {
+            "$ref": "#/components/schemas/RejectCompletionCommand"
+          },
+          {
+            "$ref": "#/components/schemas/CancelTaskCommand"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "update_draft": "#/components/schemas/UpdateDraftCommand",
+            "submit_report": "#/components/schemas/SubmitReportCommand",
+            "accept_task": "#/components/schemas/AcceptTaskCommand",
+            "assign_task": "#/components/schemas/AssignTaskCommand",
+            "bind_asset": "#/components/schemas/BindAssetCommand",
+            "propose_appointment": "#/components/schemas/ProposeAppointmentCommand",
+            "confirm_appointment": "#/components/schemas/ConfirmAppointmentCommand",
+            "reject_appointment": "#/components/schemas/RejectAppointmentCommand",
+            "start_work": "#/components/schemas/StartWorkCommand",
+            "add_progress": "#/components/schemas/AddProgressCommand",
+            "submit_completion": "#/components/schemas/SubmitCompletionCommand",
+            "accept_completion": "#/components/schemas/AcceptCompletionCommand",
+            "reject_completion": "#/components/schemas/RejectCompletionCommand",
+            "cancel_task": "#/components/schemas/CancelTaskCommand"
+          }
+        }
+      },
+      "AgentRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "DRAFT_ASSIST",
+              "REPAIR_ADVICE",
+              "PROGRESS_SUMMARY"
+            ]
+          },
+          "expected_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "purpose",
+          "expected_version"
+        ]
+      },
+      "AgentRun": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "base_task_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "QUEUED",
+              "RUNNING",
+              "SUCCEEDED",
+              "FAILED",
+              "CANCELLED"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "DRAFT_ASSIST",
+              "REPAIR_ADVICE",
+              "PROGRESS_SUMMARY"
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missing_fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxItems": 30
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 30
+          },
+          "suggested_command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskCommand"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "base_task_version",
+          "state",
+          "purpose"
+        ]
+      },
+      "Notification": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "created_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "read_at_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "task_id",
+          "kind",
+          "created_at_ms",
+          "read_at_ms"
+        ]
+      },
+      "PairingCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "pairing_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "user_code": {
+            "type": "string",
+            "pattern": "^[0-9]{8}$"
+          },
+          "poll_secret": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 256
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "pairing_id",
+          "user_code",
+          "poll_secret",
+          "expires_at_ms"
+        ]
+      },
+      "PairingPollResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ISSUED"
+            ]
+          },
+          "host_session_token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 512
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "description": "Token only on first successful APPROVED -> ISSUED transition. Re-poll after consumption returns 410, not a second token."
+      },
+      "ExportEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "1.0"
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "local_task_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "local_task_version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "project_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "asset_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "local_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "external_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "local_id",
+              "external_id"
+            ]
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "UPSERT_REPAIR_TASK"
+            ]
+          },
+          "snapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "$ref": "#/components/schemas/TaskStatus"
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "appointment": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Appointment"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "status",
+              "summary",
+              "appointment"
+            ]
+          },
+          "occurred_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "schema_version",
+          "correlation_id",
+          "local_task_id",
+          "local_task_version",
+          "project_ref",
+          "asset_ref",
+          "operation",
+          "snapshot",
+          "occurred_at_ms"
+        ]
+      },
+      "ExternalReceipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/SyncState"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correlation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "state",
+          "external_id",
+          "correlation_id"
+        ]
+      }
+    }
+  }
+}

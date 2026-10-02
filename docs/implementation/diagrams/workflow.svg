@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1080" width="1600" height="1080" role="img" aria-label="图2 业务状态机：设计交接图，非已实现功能">
+  <defs>
+    <marker id="w-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151"/>
+    </marker>
+    <marker id="w-ah-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <style>
+    text{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#1f2933}
+    .ttl{font-size:24px;font-weight:700;fill:#111827}
+    .sub{font-size:15px;fill:#4b5563}
+    .st{font-size:16px;font-weight:700;fill:#111827}
+    .stc{font-size:15px;fill:#4b5563}
+    .tid{font-size:15px;font-weight:700;fill:#8a4b00}
+    .th{font-size:15px;font-weight:700;fill:#111827}
+    .td{font-size:15px}
+    .m{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;fill:#374151}
+    .a{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#w-ah)}
+    .ar{stroke:#c0392b;stroke-width:2;fill:none;marker-end:url(#w-ah-r)}
+    .todo{fill:#fff8e6;stroke:#c8871a;stroke-width:2;stroke-dasharray:10 6}
+    .data{fill:#eaf7ef;stroke:#1f8a4c;stroke-width:2}
+    .gate{fill:#fdeeee;stroke:#c0392b;stroke-width:2}
+    .row{fill:#ffffff;stroke:#d7dbe0;stroke-width:1}
+    .rowalt{fill:#fafbfc;stroke:#d7dbe0;stroke-width:1}
+    .rowhead{fill:#f1f4f8;stroke:#d7dbe0;stroke-width:1}
+    .note{fill:#f7f9fc;stroke:#d7dbe0;stroke-width:1}
+  </style>
+  <rect x="0" y="0" width="1600" height="1080" fill="#ffffff"/>
+
+  <text class="ttl" x="40" y="46">图 2 · 业务状态机与转移表（设计交接图，不是已实现功能）</text>
+  <text class="sub" x="40" y="74">状态与命名见 00_DECISIONS.md。黄色虚线=待实现的业务状态；红色=终止/退回路径。预约状态独立保存。</text>
+  <text class="sub" x="40" y="100">预约状态、动作状态、外部同步状态与任务状态相互独立；本图只描述任务状态。表内 T1–T10 为主要转移，完整守卫以需求与接口文档为准。</text>
+
+  <!-- 主链 -->
+  <rect class="todo" x="25" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="45" y="220">DRAFT</text>
+  <text class="stc" x="45" y="246">草稿，待补充</text>
+
+  <rect class="todo" x="250" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="270" y="220">OPEN</text>
+  <text class="stc" x="270" y="246">已提交，待接单</text>
+
+  <rect class="todo" x="475" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="495" y="220">ACCEPTED</text>
+  <text class="stc" x="495" y="246">已接单 / 已分配</text>
+
+  <rect class="todo" x="700" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="720" y="220">SCHEDULED</text>
+  <text class="stc" x="720" y="246">预约已确认</text>
+
+  <rect class="todo" x="925" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="945" y="220">IN_PROGRESS</text>
+  <text class="stc" x="945" y="246">处理中</text>
+
+  <rect class="todo" x="1150" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="1170" y="220">AWAITING_</text>
+  <text class="st" x="1170" y="242">ACCEPTANCE</text>
+  <text class="stc" x="1170" y="266">完工待验收</text>
+
+  <rect class="data" x="1375" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="1395" y="220">COMPLETED</text>
+  <text class="stc" x="1395" y="246">已验收完成</text>
+
+  <line class="a" x1="220" y1="228" x2="248" y2="228"/><text class="tid" x="224" y="172">T1</text>
+  <line class="a" x1="445" y1="228" x2="473" y2="228"/><text class="tid" x="449" y="172">T2</text>
+  <line class="a" x1="670" y1="228" x2="698" y2="228"/><text class="tid" x="674" y="172">T3</text>
+  <line class="a" x1="895" y1="228" x2="923" y2="228"/><text class="tid" x="899" y="172">T4</text>
+  <line class="a" x1="1120" y1="228" x2="1148" y2="228"/><text class="tid" x="1124" y="172">T5</text>
+  <line class="a" x1="1345" y1="228" x2="1373" y2="228"/><text class="tid" x="1349" y="172">T6</text>
+
+  <!-- 预约超时自环 -->
+  <polyline class="ar" points="797,180 797,140 862,140 862,180"/>
+  <text class="tid" x="600" y="130">T10 预约超时：仅提示，不自动完成</text>
+
+  <!-- 取消 -->
+  <polyline class="ar" points="25,310 1017,310"/>
+  <line class="ar" x1="1017" y1="310" x2="1096" y2="310"/>
+  <text class="tid" x="900" y="302">T9 取消</text>
+  <rect class="gate" x="1100" y="280" width="230" height="60" rx="8"/>
+  <text class="st" x="1120" y="317">CANCELLED（终止）</text>
+
+  <!-- 验收退回 T7 -->
+  <polyline class="ar" points="1247,276 1247,350 1022,350 1022,278"/>
+  <text class="tid" x="1050" y="374">T7 验收退回（理由必填）</text>
+
+  <!-- 经理改派 T8 -->
+  <polyline class="ar" points="797,276 797,400 577,400 577,278"/>
+  <text class="tid" x="600" y="424">T8 经理改派（未开工）</text>
+
+  <!-- 转移表 -->
+  <rect class="rowhead" x="40" y="440" width="1520" height="40" rx="0"/>
+  <text class="th" x="56" y="466">编号</text>
+  <text class="th" x="116" y="466">动作</text>
+  <text class="th" x="436" y="466">前置状态</text>
+  <text class="th" x="626" y="466">执行者</text>
+  <text class="th" x="896" y="466">校验与结果（编码依据）</text>
+
+  <rect class="row" x="40" y="480" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="508">T1</text>
+  <text class="td" x="116" y="508">提交报单</text>
+  <text class="td" x="436" y="508">DRAFT</text>
+  <text class="td" x="626" y="508">报修人</text>
+  <text class="td" x="896" y="502">幂等：相同源事件重复投递返回同一草稿，不重复建单</text>
+  <text class="td" x="896" y="520">必填项目、问题原文、已确认服务空间、症状、联系人 → OPEN</text>
+
+  <rect class="rowalt" x="40" y="526" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="554">T2</text>
+  <text class="td" x="116" y="554">原子接单 / 经理分配</text>
+  <text class="td" x="436" y="554">OPEN</text>
+  <text class="td" x="626" y="554">技工（自主）/ 经理（分配）</text>
+  <text class="td" x="896" y="548">乐观锁只允许一人成功，另一人收到冲突并刷新当前承接者</text>
+  <text class="td" x="896" y="566">经理分配事件标注“经理分配”，不伪称技工已确认 → ACCEPTED</text>
+
+  <rect class="row" x="40" y="572" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="600">T3</text>
+  <text class="td" x="116" y="600">确认预约</text>
+  <text class="td" x="436" y="600">ACCEPTED</text>
+  <text class="td" x="626" y="600">报修人（不得由技工代确认）</text>
+  <text class="td" x="896" y="594">事务内校验提议有效期、当前承接者、同技工半开区间 [start,end) 冲突</text>
+  <text class="td" x="896" y="612">拒绝或过期保持 ACCEPTED；确认成功 → SCHEDULED</text>
+
+  <rect class="rowalt" x="40" y="618" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="646">T4</text>
+  <text class="td" x="116" y="646">开工</text>
+  <text class="td" x="436" y="646">SCHEDULED</text>
+  <text class="td" x="626" y="646">当前承接技工</text>
+  <text class="td" x="896" y="640">需存在有效确认预约（start ≤ now &lt; end）且已绑定有效主设备</text>
+  <text class="td" x="896" y="658">其他未确认提议置 SUPERSEDED → IN_PROGRESS</text>
+
+  <rect class="row" x="40" y="664" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="692">T5</text>
+  <text class="td" x="116" y="692">提交完工</text>
+  <text class="td" x="436" y="692">IN_PROGRESS</text>
+  <text class="td" x="626" y="692">当前承接技工</text>
+  <text class="td" x="896" y="686">需处置说明 + 至少一份证据附件 + 设备已确认；根因可为 UNKNOWN</text>
+  <text class="td" x="896" y="704">完工不等于验收 → AWAITING_ACCEPTANCE</text>
+
+  <rect class="rowalt" x="40" y="710" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="738">T6</text>
+  <text class="td" x="116" y="738">验收通过</text>
+  <text class="td" x="436" y="738">AWAITING_ACCEPTANCE</text>
+  <text class="td" x="626" y="738">报修人 / 经理（代验收理由必填）</text>
+  <text class="td" x="896" y="732">写入验收记录；代验收记录 on_behalf=true 与理由</text>
+  <text class="td" x="896" y="750">技工不得自我验收 → COMPLETED</text>
+
+  <rect class="row" x="40" y="756" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="784">T7</text>
+  <text class="td" x="116" y="784">验收退回</text>
+  <text class="td" x="436" y="784">AWAITING_ACCEPTANCE</text>
+  <text class="td" x="626" y="784">报修人 / 经理</text>
+  <text class="td" x="896" y="778">退回问题说明必填；保留前次完工证据与验收失败记录</text>
+  <text class="td" x="896" y="796">可再次提交新的完工记录 → IN_PROGRESS</text>
+
+  <rect class="rowalt" x="40" y="802" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="830">T8</text>
+  <text class="td" x="116" y="830">经理改派</text>
+  <text class="td" x="436" y="830">ACCEPTED / SCHEDULED（未开工）</text>
+  <text class="td" x="626" y="830">经理</text>
+  <text class="td" x="896" y="824">旧确认预约释放、旧提议取消；新承接者重新安排预约</text>
+  <text class="td" x="896" y="842">IN_PROGRESS 禁止直接改派 → ACCEPTED</text>
+
+  <rect class="row" x="40" y="848" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="876">T9</text>
+  <text class="td" x="116" y="876">取消</text>
+  <text class="td" x="436" y="876">报修人：DRAFT / OPEN；经理：至 IN_PROGRESS</text>
+  <text class="td" x="626" y="876">报修人 / 经理</text>
+  <text class="td" x="896" y="870">经理理由必填；IN_PROGRESS 不得静默换人，需先记录现场处置</text>
+  <text class="td" x="896" y="888">→ CANCELLED（终止）</text>
+
+  <rect class="rowalt" x="40" y="894" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="922">T10</text>
+  <text class="td" x="116" y="922">预约超时</text>
+  <text class="td" x="436" y="922">SCHEDULED</text>
+  <text class="td" x="626" y="922">系统提示（SYSTEM）</text>
+  <text class="td" x="896" y="916">预约结束仍未开工只显示“预约已超时，需重新预约”</text>
+  <text class="td" x="896" y="934">不自动完成、不自动取消；处理超出原结束时间只显示超时</text>
+
+  <!-- 底部独立状态说明 -->
+  <rect class="note" x="40" y="960" width="600" height="90" rx="8"/>
+  <text class="th" x="56" y="986">预约状态（与任务状态独立）</text>
+  <text class="m" x="56" y="1012">PROPOSED / CONFIRMED / REJECTED / EXPIRED</text>
+  <text class="m" x="56" y="1036">/ SUPERSEDED / CANCELLED</text>
+
+  <rect class="note" x="660" y="960" width="480" height="90" rx="8"/>
+  <text class="th" x="676" y="986">动作与外部同步状态</text>
+  <text class="m" x="676" y="1012">动作：SUCCEEDED / REJECTED / FAILED</text>
+  <text class="m" x="676" y="1036">外部：NOT_CONFIGURED / PENDING / SUCCEEDED / FAILED / UNKNOWN</text>
+
+  <rect class="note" x="1160" y="960" width="400" height="90" rx="8"/>
+  <text class="th" x="1176" y="986">终止态与重开</text>
+  <text class="td" x="1176" y="1012">COMPLETED / CANCELLED 不可直接改历史；</text>
+  <text class="td" x="1176" y="1036">再次故障创建新任务并关联历史任务。</text>
+</svg>

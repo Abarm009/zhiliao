@@ -1,0 +1,23 @@
+flowchart TB
+  subgraph Development[开发协作：不与产品运行混用]
+    Goal[人定目标和批准范围] --> Design[主模型设计与审查]
+    Design --> Code[Codex Router执行模型编码]
+    Code --> Review[独立复验与人工验收]
+    Review -. 退回整改 .-> Code
+  end
+  subgraph Product[维修协作应用]
+    Intent[自然语言意图与可信会话] --> Runtime[AgentRuntimePort]
+    Runtime --> Queries[授权查询：设备 / 历史 / 经验来源]
+    Queries --> Proposal[结构化建议与IntentSpec]
+    Proposal --> Validator[schema / 来源 / 版本校验]
+    Validator --> Card[原生任务卡：固定片段 / 数据绑定]
+    Card --> Consent[人确认具体动作]
+    Consent --> Exec[统一命令执行 / 单事务]
+    Exec --> DB[(repair.db与不可变业务事件)]
+    DB --> Verifier[独立结果核验 / 最新投影]
+    Verifier --> Card
+    Card --> Accept[人工独立验收]
+    Accept --> Exec
+    DB -. 默认NOT_CONFIGURED .-> External[外部业务系统预留]
+  end
+  Review -. 使用隔离场景复跑 .-> Product

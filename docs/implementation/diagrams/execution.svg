@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1320" width="1600" height="1320" role="img" aria-label="图3 接单与预约确认事务时序：设计交接图，非已实现功能">
+  <defs>
+    <marker id="e-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151"/>
+    </marker>
+    <marker id="e-ah-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f8a4c"/>
+    </marker>
+    <marker id="e-ah-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a6d1a"/>
+    </marker>
+  </defs>
+  <style>
+    text{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#1f2933}
+    .ttl{font-size:24px;font-weight:700;fill:#111827}
+    .sub{font-size:15px;fill:#4b5563}
+    .h{font-size:15px;font-weight:700;fill:#111827}
+    .msg{font-size:15px;fill:#1f2933}
+    .lbl{font-size:15px;font-weight:700;fill:#8a4b00}
+    .life{stroke:#9aa3ad;stroke-width:1.5;stroke-dasharray:6 6}
+    .a{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#e-ah)}
+    .ab{stroke:#1f8a4c;stroke-width:2;fill:none;marker-end:url(#e-ah-b)}
+    .ad{stroke:#8a6d1a;stroke-width:2;fill:none;stroke-dasharray:9 5;marker-end:url(#e-ah-d)}
+    .box-todo{fill:#fff8e6;stroke:#c8871a;stroke-width:2;stroke-dasharray:10 6}
+    .box-now{fill:#eef4ff;stroke:#2f6fdb;stroke-width:2}
+    .box-data{fill:#eaf7ef;stroke:#1f8a4c;stroke-width:2}
+    .note{fill:#f7f9fc;stroke:#d7dbe0;stroke-width:1}
+  </style>
+  <rect x="0" y="0" width="1600" height="1320" fill="#ffffff"/>
+
+  <text class="ttl" x="40" y="46">图 3 · 接单与预约确认的事务时序（设计交接图，不是已实现功能）</text>
+  <text class="sub" x="40" y="74">所有写操作必须经过统一命令执行边界；本图给出顺序、校验点与冲突语义，供编码实现使用。黄色虚线框=待实现；蓝色实线框=迁移保留；绿色=事实源。</text>
+  <text class="sub" x="40" y="100">HTTP/SSE 是本系统自有协议，不是 OctoSense 官方 API；卡片不直连数据库，也不调用旧写路由。</text>
+
+  <!-- 生命线头部 -->
+  <rect class="box-todo" x="55" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="75" y="176">宿主原生卡片</text>
+  <text class="msg" x="75" y="196">Rust + Makepad（L0）</text>
+
+  <rect class="box-todo" x="385" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="405" y="176">后端命令 API</text>
+  <text class="msg" x="405" y="196">受控会话 / HTTP + SSE</text>
+
+  <rect class="box-todo" x="715" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="735" y="176">任务应用服务</text>
+  <text class="msg" x="735" y="196">application/</text>
+
+  <rect class="box-todo" x="1045" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="1065" y="176">统一命令执行边界</text>
+  <text class="msg" x="1065" y="196">校验 / 幂等 / 版本 / 回执</text>
+
+  <rect class="box-data" x="1365" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="1385" y="176">SQLite 单库</text>
+  <text class="msg" x="1385" y="196">runtime/repair.db（repair_*）</text>
+
+  <line class="life" x1="170" y1="206" x2="170" y2="1140"/>
+  <line class="life" x1="500" y1="206" x2="500" y2="1140"/>
+  <line class="life" x1="830" y1="206" x2="830" y2="1140"/>
+  <line class="life" x1="1160" y1="206" x2="1160" y2="1140"/>
+  <line class="life" x1="1480" y1="206" x2="1480" y2="1140"/>
+
+  <!-- 阶段 A -->
+  <text class="lbl" x="40" y="228">阶段 A：接单 accept_task（原子性 + 版本）</text>
+
+  <line class="a" x1="178" y1="256" x2="492" y2="256"/>
+  <text class="msg" x="335" y="234" text-anchor="middle">① accept_task(task_id, expected_version,</text>
+  <text class="msg" x="335" y="250" text-anchor="middle">idempotency_key)</text>
+
+  <line class="a" x1="508" y1="316" x2="822" y2="316"/>
+  <text class="msg" x="665" y="308" text-anchor="middle">② 解析服务端会话身份（不信任请求体角色与 user_id）</text>
+
+  <line class="a" x1="838" y1="376" x2="1152" y2="376"/>
+  <text class="msg" x="995" y="368" text-anchor="middle">③ 提交命令：身份 / 项目范围 + 前置状态校验</text>
+
+  <line class="a" x1="1168" y1="436" x2="1472" y2="436"/>
+  <text class="msg" x="1320" y="428" text-anchor="middle">④ BEGIN IMMEDIATE；读取承接者与 task.version</text>
+
+  <line class="ab" x1="1472" y1="496" x2="1168" y2="496"/>
+  <text class="msg" x="1320" y="472" text-anchor="middle">⑤ 原子 UPDATE ... WHERE version=? AND assignee IS NULL</text>
+  <text class="msg" x="1320" y="488" text-anchor="middle">受影响行数=1 才成功；0 行 → 409 VERSION_CONFLICT / ALREADY_ASSIGNED</text>
+
+  <line class="a" x1="1168" y1="556" x2="1472" y2="556"/>
+  <text class="msg" x="1320" y="548" text-anchor="middle">⑥ 写入 action_log + task_event（同一事务提交）</text>
+
+  <line class="ab" x1="1152" y1="616" x2="838" y2="616"/>
+  <text class="msg" x="995" y="608" text-anchor="middle">⑦ 回执 SUCCEEDED + 新版本号</text>
+
+  <line class="ab" x1="822" y1="676" x2="508" y2="676"/>
+  <text class="msg" x="665" y="668" text-anchor="middle">⑧ 任务投影：承接者、状态、可执行动作</text>
+
+  <line class="ab" x1="492" y1="736" x2="178" y2="736"/>
+  <text class="msg" x="335" y="728" text-anchor="middle">⑨ 200 回执；再 GET 最新投影，不使用本地假成功</text>
+
+  <!-- 阶段 B -->
+  <text class="lbl" x="40" y="786">阶段 B：预约提议与确认（提议不占资源，确认时查冲突）</text>
+
+  <line class="a" x1="178" y1="816" x2="492" y2="816"/>
+  <text class="msg" x="335" y="808" text-anchor="middle">⑩ propose_appointment(明确起止区间) → PROPOSED，旧提议 SUPERSEDED</text>
+
+  <line class="a" x1="178" y1="876" x2="492" y2="876"/>
+  <text class="msg" x="335" y="868" text-anchor="middle">⑪ confirm_appointment(appointment_id, expected_version, key)</text>
+
+  <line class="a" x1="508" y1="936" x2="1152" y2="936"/>
+  <text class="msg" x="830" y="928" text-anchor="middle">⑫ 命令：确认预约（仅该任务报修人，经理 P0 不代确认）</text>
+
+  <line class="a" x1="1168" y1="996" x2="1472" y2="996"/>
+  <text class="msg" x="1320" y="972" text-anchor="middle">⑬ 事务内校验：提议有效期 + 当前承接者</text>
+  <text class="msg" x="1320" y="988" text-anchor="middle">+ 同技工半开区间 [start,end) 冲突</text>
+
+  <line class="ab" x1="1472" y1="1056" x2="1168" y2="1056"/>
+  <text class="msg" x="1320" y="1048" text-anchor="middle">⑭ UPDATE appointment=CONFIRMED + task→SCHEDULED + 事件（同事务）</text>
+
+  <line class="ad" x1="1152" y1="1116" x2="178" y2="1116"/>
+  <text class="msg" x="665" y="1108" text-anchor="middle">⑮ 回读任务卡：预约起止时间、确认状态、下一步由谁处理、外部同步状态</text>
+
+  <!-- 底部说明 -->
+  <rect class="note" x="40" y="1160" width="490" height="130" rx="8"/>
+  <text class="h" x="56" y="1186">版本与幂等</text>
+  <text class="msg" x="56" y="1210">相同 idempotency_key 重试返回原回执，不重复建单、不重复确认。</text>
+  <text class="msg" x="56" y="1234">版本不一致返回 409，界面刷新投影后由用户重新决定。</text>
+  <text class="msg" x="56" y="1258">网络失败保留同一幂等键重试；外部同步未知只写 outbox，不让本地事务悬空。</text>
+
+  <rect class="note" x="550" y="1160" width="500" height="130" rx="8"/>
+  <text class="h" x="566" y="1186">同技工时间冲突</text>
+  <text class="msg" x="566" y="1210">冲突条件：existing.start &lt; new.end AND existing.end &gt; new.start。</text>
+  <text class="msg" x="566" y="1234">范围：同技工、同组织内全部项目、CONFIRMED；排除本任务将被替换的旧预约。</text>
+  <text class="msg" x="566" y="1258">只返回“该时间不可用”，不泄露其他任务的报修人与地址信息。</text>
+
+  <rect class="note" x="1070" y="1160" width="490" height="130" rx="8"/>
+  <text class="h" x="1086" y="1186">回读与恢复</text>
+  <text class="msg" x="1086" y="1210">写成功后一律按服务端版本回读投影；SSE 只是变更提示。</text>
+  <text class="msg" x="1086" y="1234">重连用事件游标，游标过旧则全量刷新；离线时标明缓存时间并禁用写操作。</text>
+  <text class="msg" x="1086" y="1258">停机恢复从持久化任务与动作记录开始，不重读聊天猜测已执行步骤。</text>
+</svg>

@@ -1,0 +1,431 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>维修任务协作 · 编码架构图册</title><style>
+:root{--ink:#183447;--muted:#637685;--bg:#eef3f5;--line:#d5e0e5;--accent:#117d77}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}a{color:#126d79;text-decoration:none}a:hover{text-decoration:underline}header{background:#15394a;color:white;padding:52px max(5vw,24px) 38px}header h1{font-size:clamp(30px,4vw,48px);margin:9px 0 12px;letter-spacing:-1px}header p{max-width:1040px;color:#d0e2e8}.eyebrow{font:12px/1.4 ui-monospace,monospace;letter-spacing:2px;color:#76c6ba}.badge{display:inline-block;border:1px solid #74aab1;border-radius:30px;padding:5px 13px;font-size:13px;color:#d9f3e8;margin-right:8px}.banner{background:#fff3d8;border:1px solid #e7d19d;margin:24px max(5vw,24px);padding:15px 20px;border-radius:10px;font-size:15px}.layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:26px;margin:26px max(3vw,20px)}nav{position:sticky;top:22px;align-self:start}nav a{display:block;padding:11px 12px;border-bottom:1px solid var(--line);font-size:14px}nav b{display:inline-block;width:34px;font:12px ui-monospace,monospace;color:#82939c}.read{font-size:13px;padding:16px 12px}.read a{display:block;border:0;padding:6px 0}main{min-width:0}section{background:white;border:1px solid var(--line);border-radius:16px;margin-bottom:28px;overflow:hidden;scroll-margin-top:18px}.sectionhead{padding:25px 28px;display:flex;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line)}.sectionhead .eyebrow{color:#117d77}h2{font-size:25px;margin:5px 0}.sectionhead p{margin:5px 0 0;color:var(--muted);font-size:14px}.tools{display:flex;gap:8px;align-items:start;white-space:nowrap}.tools a,button{border:1px solid var(--line);background:#f9fbfc;border-radius:7px;padding:7px 11px;font:13px inherit;color:#225568;cursor:pointer}.diagram{overflow:auto;padding:12px}.diagram svg{display:block;width:100%;height:auto}.diagram.actual svg{width:auto;max-width:none}footer{padding:25px 5vw 50px;color:var(--muted);font-size:14px}.legend{display:flex;gap:22px;flex-wrap:wrap;font-size:13px}.dot{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}.summary div{background:#204758;padding:14px 18px;border-radius:10px}.summary strong{display:block;color:white}.summary span{font-size:14px;color:#c5dce3}@media(max-width:1000px){.layout{grid-template-columns:1fr}nav{position:static;display:flex;flex-wrap:wrap}.read{width:100%}.sectionhead{flex-wrap:wrap}.summary{grid-template-columns:1fr}}@media print{body{background:white}header{padding:20px;color:#183447;background:white}header p,.eyebrow{color:#183447}.summary,.banner,nav,.tools{display:none}.layout{display:block;margin:0}section{break-before:page;border:0}.sectionhead{padding:12px}.diagram{overflow:visible}.diagram svg,.diagram.actual svg{width:100%;height:auto}footer{font-size:11px}} </style></head><body><aside style="padding:18px 28px;background:#e6f4ef;color:#184a3b;font:15px/1.7 sans-serif"><strong>2026-09-27 Hub实证优先：</strong>Hub交付应先验证main.splash脚本应用；下方本机Python与新增Rust broker图为历史方案，不能直接派工。身份、事务与助手服务待G0裁决，见 <a href="13_APP_HUB_SUBMISSION_REVIEW.md">官方Hub差异与当前边界图</a>。业务与UI视觉保留。</aside><aside style="padding:18px 28px;background:#fff0cc;color:#513a0d;font:15px/1.7 sans-serif"><strong>设计v1.2修订：</strong>本图册保留v1.1历史路线，robrix2唯一宿主假设已撤回。最新OctoSense原生应用与App Card职责、主动跟进方向见 <a href="11_COURSE1_BASELINE_REVIEW.md">研讨课 #1 对照修订</a>。宿主专属实现须重新通过G0。</aside><header><span class="eyebrow">CODING HANDOFF · V1.1 · 2026.09.26</span><h1>维修任务协作 · 架构图册</h1><p>把报单、接单、设备身份、预约、进度和验收做成可运行的本地闭环。原生桌面宿主是比赛入口，外部工单只预留接口。</p><span class="badge">设计交接图 · 尚未编码</span><span class="badge">原生宿主须通过 G0</span><div class="summary"><div><strong>业务必须做实</strong><span>事务、权限、证据与回读，不用动画伪装完成。</span></div><div><strong>事实分开保存</strong><span>本地任务状态 ≠ 外部同步状态 ≠ 模型建议。</span></div><div><strong>交给模型可直接拆工</strong><span>配套需求、OpenAPI、参考 SQL、38 项待执行验收。</span></div></div></header><div class="banner"><strong>9月26日修订：</strong>先读<a href="07_REVISION_20260926.md">顶层决策</a>、<a href="08_REUSE_MIGRATION.md">代码复用清单</a>与<a href="09_AGENT_HARNESS.md">运行Harness</a>。五张原业务图保留，第六张说明新增运行分层。Web缩为配对与必要回归；旧图中较宽的Web描述按此修订执行。<br><strong>阅读边界：</strong>以下为目标设计，不是已接通的产品。官方发布包、宿主桥接、真实模型与应用功能必须分别验证。点击“原始尺寸”可横向查看细节，或直接打开 SVG。</div><div class="layout"><nav><a href="#agentic-loop"><b>06</b>9月26日架构修订</a><a href="#system"><b>01</b>系统与模块边界</a><a href="#workflow"><b>02</b>业务状态与角色动作</a><a href="#execution"><b>03</b>接单与预约的事务时序</a><a href="#deployment"><b>04</b>部署与信任边界</a><a href="#data"><b>05</b>数据关系与事实归属</a><div class="read"><strong>编码文档</strong><a href="README.md">交接入口与阅读顺序</a><a href="01_REQUIREMENTS.md">需求设计</a><a href="02_ARCHITECTURE.md">架构设计</a><a href="03_TECH_STACK.md">技术栈</a><a href="04_DATA_API.md">数据与 API</a><a href="openapi.json">OpenAPI 机器契约</a><a href="schema.sql">参考 SQL</a><a href="05_IMPLEMENTATION_ACCEPTANCE.md">实施与验收</a><a href="06_OFFICIAL_COMPLIANCE.md">官方要求与证据</a></div></nav><main><section id="agentic-loop"><div class="sectionhead"><div><span class="eyebrow">ARCHITECTURE / 06 · 2026-09-26</span><h2>Agent运行、开发双环与证据</h2><p>保留旧业务核心，区分模型建议、动作结果和人工验收。</p></div><div class="tools"><button onclick="zoom(this)">原始尺寸</button><a href="diagrams/agentic-loop.svg">SVG</a><a href="diagrams/agentic-loop.mmd">Mermaid</a></div></div><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1250" viewBox="0 0 1600 1250" role="img" aria-label="9月26日双环架构：开发审查与产品维修协作分离"><rect width="1600" height="1250" fill="#f7fafb"/><text x="40" y="50" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="31" fill="#183447" font-weight="700">图 6 · 保留业务核心，分开执行与判断</text><text x="40" y="83" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" fill="#183447" font-weight="400">设计 v1.1 · 2026-09-26 · 所有新增模块待实现；产品运行不依赖开发时的个人Codex会话</text><text x="40" y="133" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" fill="#183447" font-weight="700">A  开发协作：借鉴OctoLoop职责，本项目使用Codex Router；不等于已实接官方OctoLoop</text><rect x="40" y="155" width="350" height="150" rx="12" fill="#fff4dd" stroke="#b6cbd5"/><text x="58" y="187" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">人：确定目标与边界</text><text x="58" y="217" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">冻结维修主场景</text><text x="58" y="244" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">保留全部用户P0功能</text><text x="58" y="271" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">最终人工验收</text><rect x="430" y="155" width="350" height="150" rx="12" fill="#edf4f8" stroke="#b6cbd5"/><text x="448" y="187" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">主模型：设计与审查</text><text x="448" y="217" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">拆分明确文件所有权</text><text x="448" y="244" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">核对官方证据和旧代码</text><text x="448" y="271" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">审查契约与关键逻辑</text><rect x="820" y="155" width="350" height="150" rx="12" fill="#edf4f8" stroke="#b6cbd5"/><text x="838" y="187" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">Router执行模型：编码</text><text x="838" y="217" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">按照任务书实现</text><text x="838" y="244" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">提交代码与真实测试记录</text><text x="838" y="271" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">失败、阻碍明确返回</text><rect x="1210" y="155" width="350" height="150" rx="12" fill="#e6f2ec" stroke="#b6cbd5"/><text x="1228" y="187" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">独立复验：接受或退回</text><text x="1228" y="217" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">重跑关键场景和负向用例</text><text x="1228" y="244" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">执行者自称完成不算通过</text><text x="1228" y="271" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">版本与证据一一对应</text><path d="M390 231 L430 231" stroke="#497b86" stroke-width="2" fill="none"/><path d="M423 226 L430 231 L423 236" fill="none" stroke="#497b86" stroke-width="2"/><path d="M780 231 L820 231" stroke="#497b86" stroke-width="2" fill="none"/><path d="M813 226 L820 231 L813 236" fill="none" stroke="#497b86" stroke-width="2"/><path d="M1170 231 L1210 231" stroke="#497b86" stroke-width="2" fill="none"/><path d="M1203 226 L1210 231 L1203 236" fill="none" stroke="#497b86" stroke-width="2"/><text x="40" y="359" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="20" fill="#183447" font-weight="700">B  产品运行：自然语言意图 → 证据 → 可操作卡片 → 授权 → 事务 → 回读 → 人验收</text><rect x="40" y="385" width="350" height="150" rx="12" fill="#edf4f8" stroke="#b6cbd5"/><text x="58" y="417" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">① 意图与真实会话</text><text x="58" y="447" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">报修人 / 技工 / 经理</text><text x="58" y="474" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">任务ID、版本、项目范围</text><text x="58" y="501" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">原生入口与受控Rust broker</text><rect x="430" y="385" width="350" height="150" rx="12" fill="#edf4f8" stroke="#b6cbd5"/><text x="448" y="417" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">② 受限Agent运行</text><text x="448" y="447" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">优先复用现有模型客户端</text><text x="448" y="474" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">AgentRuntimePort一次一实现</text><text x="448" y="501" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">可选octos替换需过接入门</text><rect x="820" y="385" width="350" height="150" rx="12" fill="#edf4f8" stroke="#b6cbd5"/><text x="838" y="417" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">③ 有来源的只读能力</text><text x="838" y="447" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">设备事实 + 服务空间关系</text><text x="838" y="474" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">历史事件 + 经验及来源</text><text x="838" y="501" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">查询前鉴权；真值不入检索</text><rect x="1210" y="385" width="350" height="150" rx="12" fill="#edf4f8" stroke="#b6cbd5"/><text x="1228" y="417" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">④ 建议与IntentSpec</text><text x="1228" y="447" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">结构化字段 / 引用 / 缺失项</text><text x="1228" y="474" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">建议命令与基础任务版本</text><text x="1228" y="501" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">不写业务事实、不替人批准</text><path d="M390 461 L430 461" stroke="#497b86" stroke-width="2" fill="none"/><path d="M423 456 L430 461 L423 466" fill="none" stroke="#497b86" stroke-width="2"/><path d="M780 461 L820 461" stroke="#497b86" stroke-width="2" fill="none"/><path d="M813 456 L820 461 L813 466" fill="none" stroke="#497b86" stroke-width="2"/><path d="M1170 461 L1210 461" stroke="#497b86" stroke-width="2" fill="none"/><path d="M1203 456 L1210 461 L1203 466" fill="none" stroke="#497b86" stroke-width="2"/><text x="40" y="577" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="18" fill="#183447" font-weight="400">⑤ 校验后回到同一原生卡片：显示来源、补充歧义、核对具体动作；过期建议不得继续执行</text><path d="M1385 535 L1385 565" stroke="#497b86" stroke-width="2" fill="none"/><path d="M1380 558 L1385 565 L1390 558" fill="none" stroke="#497b86" stroke-width="2"/><rect x="40" y="620" width="350" height="160" rx="12" fill="#fff4dd" stroke="#b6cbd5"/><text x="58" y="652" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">⑥ 用户确认具体动作</text><text x="58" y="682" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">固定界面片段和数据绑定</text><text x="58" y="709" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">不动态加载任意脚本或URL</text><text x="58" y="736" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">grant + 后端角色共同核验</text><rect x="430" y="620" width="350" height="160" rx="12" fill="#edf4f8" stroke="#b6cbd5"/><text x="448" y="652" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">⑦ 统一命令执行</text><text x="448" y="682" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">身份 / 状态 / 版本 / 幂等</text><text x="448" y="709" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">预约冲突与证据归属校验</text><text x="448" y="736" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">单事务保存回执和事件</text><rect x="820" y="620" width="350" height="160" rx="12" fill="#e6f2ec" stroke="#b6cbd5"/><text x="838" y="652" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">⑧ 独立结果核验</text><text x="838" y="682" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">读取动作版本与不可变事件</text><text x="838" y="709" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">更高版本不误判旧动作</text><text x="838" y="736" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">回读失败保留待核验状态</text><rect x="1210" y="620" width="350" height="160" rx="12" fill="#e6f2ec" stroke="#b6cbd5"/><text x="1228" y="652" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="21" fill="#183447" font-weight="700">⑨ 同卡更新与独立验收</text><text x="1228" y="682" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">最新任务投影来自数据库</text><text x="1228" y="709" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">完工 ≠ 已验收完成</text><text x="1228" y="736" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">验收人不能为当前承接者</text><path d="M390 700 L430 700" stroke="#497b86" stroke-width="2" fill="none"/><path d="M423 695 L430 700 L423 705" fill="none" stroke="#497b86" stroke-width="2"/><path d="M780 700 L820 700" stroke="#497b86" stroke-width="2" fill="none"/><path d="M813 695 L820 700 L813 705" fill="none" stroke="#497b86" stroke-width="2"/><path d="M1170 700 L1210 700" stroke="#497b86" stroke-width="2" fill="none"/><path d="M1203 695 L1210 700 L1203 705" fill="none" stroke="#497b86" stroke-width="2"/><rect x="40" y="830" width="1520" height="145" rx="12" fill="#e9f1f5" stroke="#b6cbd5"/><text x="60" y="866" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" fill="#183447" font-weight="700">事实与存储边界</text><text x="60" y="901" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" fill="#183447" font-weight="400">runtime/repair.db：本地任务唯一权威；旧历史显式导入并保留来源；模型日志不能代替事务记录</text><text x="60" y="934" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" fill="#183447" font-weight="400">外部工单：默认 NOT_CONFIGURED；Matrix只分享任务入口，不复制授权、不成为另一套任务数据库</text><path d="M605 780 L605 830" stroke="#497b86" stroke-width="2" fill="none"/><path d="M600 823 L605 830 L610 823" fill="none" stroke="#497b86" stroke-width="2"/><path d="M995 780 L995 830" stroke="#497b86" stroke-width="2" fill="none"/><path d="M990 823 L995 830 L1000 823" fill="none" stroke="#497b86" stroke-width="2"/><rect x="40" y="1010" width="1520" height="184" rx="12" fill="#fff4dd" stroke="#b6cbd5"/><text x="60" y="1046" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="22" fill="#183447" font-weight="700">C  可复现评测与比赛门槛</text><text x="60" y="1080" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" fill="#183447" font-weight="400">冻结输入、合成数据、模型、提示词、工具权限、宿主与源码版本；保存成功 / 拒绝 / 失败 / 恢复证据</text><text x="60" y="1114" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" fill="#183447" font-weight="400">初赛原始材料未把Rust或ROM开发设为门槛；原生宿主和本地Python服务的实际接入仍必须过G0</text><text x="60" y="1148" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="19" fill="#183447" font-weight="400">主路径：Rust宿主 + Python业务核心。正式规则若要求业务全Rust，按相同契约定向移植，不双写</text><text x="40" y="1230" font-family="PingFang SC,Microsoft YaHei,sans-serif" font-size="16" fill="#183447" font-weight="400">对应文档：07_REVISION_20260926.md · 08_REUSE_MIGRATION.md · 09_AGENT_HARNESS.md</text></svg></div></section><section id="system"><div class="sectionhead"><div><span class="eyebrow">ARCHITECTURE / 01</span><h2>系统与模块边界</h2><p>从原生宿主到统一命令，再到本地业务事实。外部工单明确预留。</p></div><div class="tools"><button onclick="zoom(this)">原始尺寸</button><a href="diagrams/system.svg">SVG</a><a href="diagrams/system.mmd">Mermaid</a></div></div><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1660" width="1600" height="1660" role="img" aria-label="图1 系统与模块依赖：设计交接图，非已实现功能">
+  <defs>
+    <marker id="system-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151"/>
+    </marker>
+    <marker id="system-ah-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a6d1a"/>
+    </marker>
+  </defs>
+  <style>#system svg text{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#1f2933}#system svg .ttl{font-size:24px;font-weight:700;fill:#111827}#system svg .sub{font-size:15px;fill:#4b5563}#system svg .h{font-size:17px;font-weight:700;fill:#111827}#system svg .b{font-size:15px}#system svg .s{font-size:15px;fill:#4b5563}#system svg .m{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;fill:#374151}#system svg .lbl{font-size:15px;font-weight:700;fill:#374151}#system svg .now{fill:#eef4ff;stroke:#2f6fdb;stroke-width:2}#system svg .todo{fill:#fff8e6;stroke:#c8871a;stroke-width:2;stroke-dasharray:10 6}#system svg .ext{fill:#f3f4f6;stroke:#6b7280;stroke-width:2;stroke-dasharray:2 6}#system svg .data{fill:#eaf7ef;stroke:#1f8a4c;stroke-width:2}#system svg .gate{fill:#fdeeee;stroke:#c0392b;stroke-width:2}#system svg .a{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#system-ah)}#system svg .ad{stroke:#8a6d1a;stroke-width:2;fill:none;stroke-dasharray:9 5;marker-end:url(#system-ah-d)}
+  </style>
+  <rect x="0" y="0" width="1600" height="1660" fill="#ffffff"/>
+
+  <text class="ttl" x="40" y="46">图 1 · 系统与模块依赖（设计交接图，不是已实现功能）</text>
+  <text class="sub" x="40" y="74">命名与范围基准：docs/implementation/00_DECISIONS.md。蓝色实线框=迁移保留/现有；黄色虚线框=待实现；灰色点线框=外部预留；绿色=事实源存储；红色=接入门/未验证风险。</text>
+
+  <rect class="now" x="40" y="90" width="22" height="20" rx="3"/><text class="s" x="70" y="106">迁移保留 / 现有</text>
+  <rect class="todo" x="250" y="90" width="22" height="20" rx="3"/><text class="s" x="280" y="106">待实现</text>
+  <rect class="ext" x="410" y="90" width="22" height="20" rx="3"/><text class="s" x="440" y="106">外部预留</text>
+  <rect class="data" x="580" y="90" width="22" height="20" rx="3"/><text class="s" x="610" y="106">事实源 / 持久化</text>
+  <rect class="gate" x="790" y="90" width="22" height="20" rx="3"/><text class="s" x="820" y="106">接入门 / 未验证风险</text>
+
+  <rect class="todo" x="60" y="150" width="1480" height="100" rx="8"/>
+  <text class="h" x="80" y="182">robrix2 桌面宿主（官方发布包，版本待核对）</text>
+  <text class="b" x="80" y="210">原生维修小程序：Rust + Makepad + 固定 Octoscript L0 界面 —— 比赛主交付 UI，宿主内窗口展示任务列表与同一任务卡。</text>
+  <text class="s" x="80" y="236">不是 OS 级桌面置顶小组件，不是网页链接跳转；官方原生示例无 WebView，新应用须扩展宿主并经接入门验证。</text>
+
+  <rect class="gate" x="60" y="286" width="700" height="110" rx="8"/>
+  <text class="h" x="80" y="316">宿主权限 broker（须扩展宿主，未验证）</text>
+  <text class="b" x="80" y="344">能力声明、权限询问、受控会话凭据；Rust / Octoscript 宿主改法依官方 SDK 与固定版本决定。</text>
+  <text class="s" x="80" y="370">不能把浏览器网页当作原生接入，也不能假设宿主已提供网络或存储能力。</text>
+
+  <rect class="todo" x="800" y="286" width="740" height="110" rx="8"/>
+  <text class="h" x="820" y="316">后端受控会话 / 命令 API（HTTP + SSE，待实现）</text>
+  <text class="b" x="820" y="344">会话身份由服务端建立；卡片只调命令 API，不直连数据库、不直连旧写接口、不携带可信角色字段。</text>
+  <text class="s" x="820" y="370">HTTP/SSE 是本系统自有协议，不宣称是 OctoSense 官方 API。</text>
+  <line class="ad" x1="762" y1="341" x2="796" y2="341"/>
+  <text class="lbl" x="640" y="278">凭据 / 受控会话</text>
+
+  <rect class="todo" x="60" y="432" width="1480" height="88" rx="8"/>
+  <text class="h" x="80" y="462">身份与授权（待实现）</text>
+  <text class="b" x="80" y="490">服务器会话身份 · 角色 REPORTER / TECHNICIAN / MANAGER / SYSTEM · 项目与技能范围核验 · 权限按当前项目判定，不信任请求体中的 user_id 与角色。</text>
+  <line class="a" x1="440" y1="396" x2="440" y2="430"/>
+  <line class="a" x1="1170" y1="396" x2="1170" y2="430"/>
+
+  <rect class="todo" x="60" y="556" width="760" height="132" rx="8"/>
+  <text class="h" x="80" y="586">任务应用服务 application/（待实现）</text>
+  <text class="b" x="80" y="614">任务生命周期与版本、预约、设备绑定、完工与验收、任务投影读取与动作授权。</text>
+  <text class="m" x="80" y="642">DRAFT → OPEN → ACCEPTED → SCHEDULED → IN_PROGRESS</text>
+  <text class="m" x="80" y="666">→ AWAITING_ACCEPTANCE → COMPLETED（终止分支 CANCELLED）</text>
+
+  <rect class="todo" x="860" y="556" width="680" height="132" rx="8"/>
+  <text class="h" x="880" y="586">任务协议与投影 task_contracts/（待实现）</text>
+  <text class="b" x="880" y="614">事件输入、任务读取、动作提交、验收提交；卡片投影与事件游标。</text>
+  <text class="s" x="880" y="642">独立版本化，不改写旧 ops/contracts；重复投递不重复建单。</text>
+  <text class="s" x="880" y="668">投影只是读取视图，数据库状态才是事实。</text>
+
+  <rect class="now" x="60" y="724" width="760" height="124" rx="8"/>
+  <text class="h" x="80" y="754">Agent 推理与记忆检索（复用现有 ops/agent、llm/）</text>
+  <text class="b" x="80" y="782">真实模型执行结构化抽取、设备与历史检索、建议与阶段摘要；事实来自工具与数据库。</text>
+  <text class="s" x="80" y="808">模型只提建议：不能指定可信身份、写任意 SQL、伪造进度、单方确认预约或验收；</text>
+  <text class="s" x="80" y="832">输出校验失败可限定一次修复重试，仍失败转人工表单。</text>
+
+  <rect class="ext" x="860" y="724" width="680" height="124" rx="8"/>
+  <text class="h" x="880" y="754">模型服务（外部，必须真实配置）</text>
+  <text class="b" x="880" y="782">OpenAI 兼容接口或本地推理；密钥放本地 backend/.env，不入库、不提交。</text>
+  <text class="s" x="880" y="808">未配置时人工业务仍可执行，但真实模型验收不通过。</text>
+  <text class="s" x="880" y="832">禁止用假模型或录播结果冒充真实模型验证。</text>
+
+  <rect class="gate" x="60" y="884" width="1480" height="112" rx="8"/>
+  <text class="h" x="80" y="914">统一命令执行边界（待实现）—— 唯一业务副作用入口</text>
+  <text class="b" x="80" y="942">身份/范围校验 · 前置状态校验 · 幂等键 · 预期版本与冲突检测 · 回执 · 任务状态、动作记录与事件在同一事务提交。</text>
+  <text class="s" x="80" y="968">旧 runner、旧 HTTP 写路由、MCP、调度器与全部 UI 必须经此边界；只读查询不创建任务，不产生业务副作用。</text>
+  <line class="a" x1="440" y1="688" x2="440" y2="722"/>
+  <line class="a" x1="440" y1="848" x2="440" y2="882"/>
+  <line class="a" x1="1200" y1="688" x2="1200" y2="882"/>
+
+  <rect class="todo" x="60" y="1032" width="1480" height="88" rx="8"/>
+  <text class="h" x="80" y="1062">旧契约/历史查询保留；新仓储 repair_data/ 待实现</text>
+  <text class="b" x="80" y="1090">backend/src/wagent_backend/ops/tools/ · ops/data/ · ops/contracts/　旧契约保持兼容，新协议单独版本化，旧枚举经显式映射转换。</text>
+  <line class="a" x1="440" y1="996" x2="440" y2="1030"/>
+
+  <rect class="data" x="60" y="1156" width="760" height="124" rx="8"/>
+  <text class="h" x="80" y="1186">SQLite 新任务库 runtime/repair.db（新 repair_* 表）</text>
+  <text class="b" x="80" y="1214">新增 repair_* 任务、预约、设备、事件表；会话、图谱与附件同样固定在 runtime/。</text>
+  <text class="s" x="80" y="1240">单进程单库，不拆微服务；运行数据不写回代码目录。</text>
+
+  <rect class="todo" x="860" y="1156" width="680" height="124" rx="8"/>
+  <text class="h" x="880" y="1186">任务事件与卡片投影（待实现）</text>
+  <text class="b" x="880" y="1214">动作记录 + 事件序号 + 卡片投影，供断线重连与游标恢复。</text>
+  <text class="s" x="880" y="1240">重启恢复从持久化记录开始，不让模型重读聊天猜测已执行步骤。</text>
+  <line class="a" x1="440" y1="1120" x2="440" y2="1154"/>
+  <line class="a" x1="1200" y1="996" x2="1200" y2="1154"/>
+
+  <rect class="todo" x="60" y="1316" width="760" height="104" rx="8"/>
+  <text class="h" x="80" y="1346">持久化调度器 SYSTEM（待实现）</text>
+  <text class="b" x="80" y="1374">提议到期、预约提醒、待验收提醒；仅执行已编码动作。</text>
+  <text class="s" x="80" y="1400">不作为通用超级用户，不自动派工、不自动验收、不自动完成。</text>
+
+  <rect class="now" x="860" y="1316" width="680" height="104" rx="8"/>
+  <text class="h" x="880" y="1346">旧 Web 页面与旧 runner（迁移保留，回归入口）</text>
+  <text class="b" x="880" y="1374">仅用于开发回归与排障；不是新卡片 UI，也不承载比赛主交互。</text>
+  <text class="s" x="880" y="1400">比赛运行模式下，旧写入口接入统一边界前禁用。</text>
+
+  <rect class="ext" x="60" y="1456" width="470" height="150" rx="8"/>
+  <text class="h" x="80" y="1486">外部工单系统</text>
+  <text class="b" x="80" y="1514">external_sync_state = NOT_CONFIGURED（默认）</text>
+  <text class="s" x="80" y="1540">禁用适配器 + 版本化输出契约；</text>
+  <text class="s" x="80" y="1564">本地任务号与外部单号分开显示。</text>
+  <text class="s" x="80" y="1588">绝不生成假单号或假成功回执。</text>
+
+  <rect class="ext" x="560" y="1456" width="470" height="150" rx="8"/>
+  <text class="h" x="580" y="1486">OctoSense 官方 SDK / 宿主能力</text>
+  <text class="b" x="580" y="1514">未安装、未验证、未接通。</text>
+  <text class="s" x="580" y="1540">接入前固定发布包版本，记录支持系统</text>
+  <text class="s" x="580" y="1564">与能力清单；最小验证为宿主卡片读取</text>
+  <text class="s" x="580" y="1588">本地任务 → 确认 → 回读回执。</text>
+
+  <rect class="ext" x="1060" y="1456" width="480" height="150" rx="8"/>
+  <text class="h" x="1080" y="1486">消息通知（短信 / 企微 / 系统通知）</text>
+  <text class="b" x="1080" y="1514">未接通。</text>
+  <text class="s" x="1080" y="1540">P0 仅应用内持久化通知；界面不得</text>
+  <text class="s" x="1080" y="1564">显示“已送达”。外部同步状态与任务</text>
+  <text class="s" x="1080" y="1588">状态相互独立。</text>
+
+  <polyline class="ad" points="60,1368 40,1368 40,940 60,940"/>
+  <text class="lbl" x="20" y="1345" transform="rotate(-90 20 1345)">调度写入同边界</text>
+  <polyline class="ad" points="1540,1368 1560,1368 1560,940 1540,940"/>
+  <text class="lbl" x="1554" y="1345" transform="rotate(-90 1554 1345)">旧写入口须收敛</text>
+  <polyline class="ad" points="1540,1530 1586,1530 1586,962 1540,962"/>
+  <text class="lbl" x="1580" y="1345" transform="rotate(-90 1580 1345)">外部预留适配</text>
+</svg>
+</div></section><section id="workflow"><div class="sectionhead"><div><span class="eyebrow">ARCHITECTURE / 02</span><h2>业务状态与角色动作</h2><p>报单、接单、预约、开工、完工、验收；取消与退回必须有依据。</p></div><div class="tools"><button onclick="zoom(this)">原始尺寸</button><a href="diagrams/workflow.svg">SVG</a><a href="diagrams/workflow.mmd">Mermaid</a></div></div><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1080" width="1600" height="1080" role="img" aria-label="图2 业务状态机：设计交接图，非已实现功能">
+  <defs>
+    <marker id="workflow-w-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151"/>
+    </marker>
+    <marker id="workflow-w-ah-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <style>#workflow svg text{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#1f2933}#workflow svg .ttl{font-size:24px;font-weight:700;fill:#111827}#workflow svg .sub{font-size:15px;fill:#4b5563}#workflow svg .st{font-size:16px;font-weight:700;fill:#111827}#workflow svg .stc{font-size:15px;fill:#4b5563}#workflow svg .tid{font-size:15px;font-weight:700;fill:#8a4b00}#workflow svg .th{font-size:15px;font-weight:700;fill:#111827}#workflow svg .td{font-size:15px}#workflow svg .m{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;fill:#374151}#workflow svg .a{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#workflow-w-ah)}#workflow svg .ar{stroke:#c0392b;stroke-width:2;fill:none;marker-end:url(#workflow-w-ah-r)}#workflow svg .todo{fill:#fff8e6;stroke:#c8871a;stroke-width:2;stroke-dasharray:10 6}#workflow svg .data{fill:#eaf7ef;stroke:#1f8a4c;stroke-width:2}#workflow svg .gate{fill:#fdeeee;stroke:#c0392b;stroke-width:2}#workflow svg .row{fill:#ffffff;stroke:#d7dbe0;stroke-width:1}#workflow svg .rowalt{fill:#fafbfc;stroke:#d7dbe0;stroke-width:1}#workflow svg .rowhead{fill:#f1f4f8;stroke:#d7dbe0;stroke-width:1}#workflow svg .note{fill:#f7f9fc;stroke:#d7dbe0;stroke-width:1}
+  </style>
+  <rect x="0" y="0" width="1600" height="1080" fill="#ffffff"/>
+
+  <text class="ttl" x="40" y="46">图 2 · 业务状态机与转移表（设计交接图，不是已实现功能）</text>
+  <text class="sub" x="40" y="74">状态与命名见 00_DECISIONS.md。黄色虚线=待实现的业务状态；红色=终止/退回路径。预约状态独立保存。</text>
+  <text class="sub" x="40" y="100">预约状态、动作状态、外部同步状态与任务状态相互独立；本图只描述任务状态。表内 T1–T10 为主要转移，完整守卫以需求与接口文档为准。</text>
+
+  <!-- 主链 -->
+  <rect class="todo" x="25" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="45" y="220">DRAFT</text>
+  <text class="stc" x="45" y="246">草稿，待补充</text>
+
+  <rect class="todo" x="250" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="270" y="220">OPEN</text>
+  <text class="stc" x="270" y="246">已提交，待接单</text>
+
+  <rect class="todo" x="475" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="495" y="220">ACCEPTED</text>
+  <text class="stc" x="495" y="246">已接单 / 已分配</text>
+
+  <rect class="todo" x="700" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="720" y="220">SCHEDULED</text>
+  <text class="stc" x="720" y="246">预约已确认</text>
+
+  <rect class="todo" x="925" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="945" y="220">IN_PROGRESS</text>
+  <text class="stc" x="945" y="246">处理中</text>
+
+  <rect class="todo" x="1150" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="1170" y="220">AWAITING_</text>
+  <text class="st" x="1170" y="242">ACCEPTANCE</text>
+  <text class="stc" x="1170" y="266">完工待验收</text>
+
+  <rect class="data" x="1375" y="180" width="195" height="96" rx="8"/>
+  <text class="st" x="1395" y="220">COMPLETED</text>
+  <text class="stc" x="1395" y="246">已验收完成</text>
+
+  <line class="a" x1="220" y1="228" x2="248" y2="228"/><text class="tid" x="224" y="172">T1</text>
+  <line class="a" x1="445" y1="228" x2="473" y2="228"/><text class="tid" x="449" y="172">T2</text>
+  <line class="a" x1="670" y1="228" x2="698" y2="228"/><text class="tid" x="674" y="172">T3</text>
+  <line class="a" x1="895" y1="228" x2="923" y2="228"/><text class="tid" x="899" y="172">T4</text>
+  <line class="a" x1="1120" y1="228" x2="1148" y2="228"/><text class="tid" x="1124" y="172">T5</text>
+  <line class="a" x1="1345" y1="228" x2="1373" y2="228"/><text class="tid" x="1349" y="172">T6</text>
+
+  <!-- 预约超时自环 -->
+  <polyline class="ar" points="797,180 797,140 862,140 862,180"/>
+  <text class="tid" x="600" y="130">T10 预约超时：仅提示，不自动完成</text>
+
+  <!-- 取消 -->
+  <polyline class="ar" points="25,310 1017,310"/>
+  <line class="ar" x1="1017" y1="310" x2="1096" y2="310"/>
+  <text class="tid" x="900" y="302">T9 取消</text>
+  <rect class="gate" x="1100" y="280" width="230" height="60" rx="8"/>
+  <text class="st" x="1120" y="317">CANCELLED（终止）</text>
+
+  <!-- 验收退回 T7 -->
+  <polyline class="ar" points="1247,276 1247,350 1022,350 1022,278"/>
+  <text class="tid" x="1050" y="374">T7 验收退回（理由必填）</text>
+
+  <!-- 经理改派 T8 -->
+  <polyline class="ar" points="797,276 797,400 577,400 577,278"/>
+  <text class="tid" x="600" y="424">T8 经理改派（未开工）</text>
+
+  <!-- 转移表 -->
+  <rect class="rowhead" x="40" y="440" width="1520" height="40" rx="0"/>
+  <text class="th" x="56" y="466">编号</text>
+  <text class="th" x="116" y="466">动作</text>
+  <text class="th" x="436" y="466">前置状态</text>
+  <text class="th" x="626" y="466">执行者</text>
+  <text class="th" x="896" y="466">校验与结果（编码依据）</text>
+
+  <rect class="row" x="40" y="480" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="508">T1</text>
+  <text class="td" x="116" y="508">提交报单</text>
+  <text class="td" x="436" y="508">DRAFT</text>
+  <text class="td" x="626" y="508">报修人</text>
+  <text class="td" x="896" y="502">幂等：相同源事件重复投递返回同一草稿，不重复建单</text>
+  <text class="td" x="896" y="520">必填项目、问题原文、已确认服务空间、症状、联系人 → OPEN</text>
+
+  <rect class="rowalt" x="40" y="526" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="554">T2</text>
+  <text class="td" x="116" y="554">原子接单 / 经理分配</text>
+  <text class="td" x="436" y="554">OPEN</text>
+  <text class="td" x="626" y="554">技工（自主）/ 经理（分配）</text>
+  <text class="td" x="896" y="548">乐观锁只允许一人成功，另一人收到冲突并刷新当前承接者</text>
+  <text class="td" x="896" y="566">经理分配事件标注“经理分配”，不伪称技工已确认 → ACCEPTED</text>
+
+  <rect class="row" x="40" y="572" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="600">T3</text>
+  <text class="td" x="116" y="600">确认预约</text>
+  <text class="td" x="436" y="600">ACCEPTED</text>
+  <text class="td" x="626" y="600">报修人（不得由技工代确认）</text>
+  <text class="td" x="896" y="594">事务内校验提议有效期、当前承接者、同技工半开区间 [start,end) 冲突</text>
+  <text class="td" x="896" y="612">拒绝或过期保持 ACCEPTED；确认成功 → SCHEDULED</text>
+
+  <rect class="rowalt" x="40" y="618" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="646">T4</text>
+  <text class="td" x="116" y="646">开工</text>
+  <text class="td" x="436" y="646">SCHEDULED</text>
+  <text class="td" x="626" y="646">当前承接技工</text>
+  <text class="td" x="896" y="640">需存在有效确认预约（start ≤ now &lt; end）且已绑定有效主设备</text>
+  <text class="td" x="896" y="658">其他未确认提议置 SUPERSEDED → IN_PROGRESS</text>
+
+  <rect class="row" x="40" y="664" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="692">T5</text>
+  <text class="td" x="116" y="692">提交完工</text>
+  <text class="td" x="436" y="692">IN_PROGRESS</text>
+  <text class="td" x="626" y="692">当前承接技工</text>
+  <text class="td" x="896" y="686">需处置说明 + 至少一份证据附件 + 设备已确认；根因可为 UNKNOWN</text>
+  <text class="td" x="896" y="704">完工不等于验收 → AWAITING_ACCEPTANCE</text>
+
+  <rect class="rowalt" x="40" y="710" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="738">T6</text>
+  <text class="td" x="116" y="738">验收通过</text>
+  <text class="td" x="436" y="738">AWAITING_ACCEPTANCE</text>
+  <text class="td" x="626" y="738">报修人 / 经理（代验收理由必填）</text>
+  <text class="td" x="896" y="732">写入验收记录；代验收记录 on_behalf=true 与理由</text>
+  <text class="td" x="896" y="750">技工不得自我验收 → COMPLETED</text>
+
+  <rect class="row" x="40" y="756" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="784">T7</text>
+  <text class="td" x="116" y="784">验收退回</text>
+  <text class="td" x="436" y="784">AWAITING_ACCEPTANCE</text>
+  <text class="td" x="626" y="784">报修人 / 经理</text>
+  <text class="td" x="896" y="778">退回问题说明必填；保留前次完工证据与验收失败记录</text>
+  <text class="td" x="896" y="796">可再次提交新的完工记录 → IN_PROGRESS</text>
+
+  <rect class="rowalt" x="40" y="802" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="830">T8</text>
+  <text class="td" x="116" y="830">经理改派</text>
+  <text class="td" x="436" y="830">ACCEPTED / SCHEDULED（未开工）</text>
+  <text class="td" x="626" y="830">经理</text>
+  <text class="td" x="896" y="824">旧确认预约释放、旧提议取消；新承接者重新安排预约</text>
+  <text class="td" x="896" y="842">IN_PROGRESS 禁止直接改派 → ACCEPTED</text>
+
+  <rect class="row" x="40" y="848" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="876">T9</text>
+  <text class="td" x="116" y="876">取消</text>
+  <text class="td" x="436" y="876">报修人：DRAFT / OPEN；经理：至 IN_PROGRESS</text>
+  <text class="td" x="626" y="876">报修人 / 经理</text>
+  <text class="td" x="896" y="870">经理理由必填；IN_PROGRESS 不得静默换人，需先记录现场处置</text>
+  <text class="td" x="896" y="888">→ CANCELLED（终止）</text>
+
+  <rect class="rowalt" x="40" y="894" width="1520" height="46" rx="0"/>
+  <text class="tid" x="56" y="922">T10</text>
+  <text class="td" x="116" y="922">预约超时</text>
+  <text class="td" x="436" y="922">SCHEDULED</text>
+  <text class="td" x="626" y="922">系统提示（SYSTEM）</text>
+  <text class="td" x="896" y="916">预约结束仍未开工只显示“预约已超时，需重新预约”</text>
+  <text class="td" x="896" y="934">不自动完成、不自动取消；处理超出原结束时间只显示超时</text>
+
+  <!-- 底部独立状态说明 -->
+  <rect class="note" x="40" y="960" width="600" height="90" rx="8"/>
+  <text class="th" x="56" y="986">预约状态（与任务状态独立）</text>
+  <text class="m" x="56" y="1012">PROPOSED / CONFIRMED / REJECTED / EXPIRED</text>
+  <text class="m" x="56" y="1036">/ SUPERSEDED / CANCELLED</text>
+
+  <rect class="note" x="660" y="960" width="480" height="90" rx="8"/>
+  <text class="th" x="676" y="986">动作与外部同步状态</text>
+  <text class="m" x="676" y="1012">动作：SUCCEEDED / REJECTED / FAILED</text>
+  <text class="m" x="676" y="1036">外部：NOT_CONFIGURED / PENDING / SUCCEEDED / FAILED / UNKNOWN</text>
+
+  <rect class="note" x="1160" y="960" width="400" height="90" rx="8"/>
+  <text class="th" x="1176" y="986">终止态与重开</text>
+  <text class="td" x="1176" y="1012">COMPLETED / CANCELLED 不可直接改历史；</text>
+  <text class="td" x="1176" y="1036">再次故障创建新任务并关联历史任务。</text>
+</svg>
+</div></section><section id="execution"><div class="sectionhead"><div><span class="eyebrow">ARCHITECTURE / 03</span><h2>接单与预约的事务时序</h2><p>身份、幂等、版本、并发资源检查、事务提交、结果回读。</p></div><div class="tools"><button onclick="zoom(this)">原始尺寸</button><a href="diagrams/execution.svg">SVG</a><a href="diagrams/execution.mmd">Mermaid</a></div></div><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1320" width="1600" height="1320" role="img" aria-label="图3 接单与预约确认事务时序：设计交接图，非已实现功能">
+  <defs>
+    <marker id="execution-e-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151"/>
+    </marker>
+    <marker id="execution-e-ah-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f8a4c"/>
+    </marker>
+    <marker id="execution-e-ah-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a6d1a"/>
+    </marker>
+  </defs>
+  <style>#execution svg text{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#1f2933}#execution svg .ttl{font-size:24px;font-weight:700;fill:#111827}#execution svg .sub{font-size:15px;fill:#4b5563}#execution svg .h{font-size:15px;font-weight:700;fill:#111827}#execution svg .msg{font-size:15px;fill:#1f2933}#execution svg .lbl{font-size:15px;font-weight:700;fill:#8a4b00}#execution svg .life{stroke:#9aa3ad;stroke-width:1.5;stroke-dasharray:6 6}#execution svg .a{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#execution-e-ah)}#execution svg .ab{stroke:#1f8a4c;stroke-width:2;fill:none;marker-end:url(#execution-e-ah-b)}#execution svg .ad{stroke:#8a6d1a;stroke-width:2;fill:none;stroke-dasharray:9 5;marker-end:url(#execution-e-ah-d)}#execution svg .box-todo{fill:#fff8e6;stroke:#c8871a;stroke-width:2;stroke-dasharray:10 6}#execution svg .box-now{fill:#eef4ff;stroke:#2f6fdb;stroke-width:2}#execution svg .box-data{fill:#eaf7ef;stroke:#1f8a4c;stroke-width:2}#execution svg .note{fill:#f7f9fc;stroke:#d7dbe0;stroke-width:1}
+  </style>
+  <rect x="0" y="0" width="1600" height="1320" fill="#ffffff"/>
+
+  <text class="ttl" x="40" y="46">图 3 · 接单与预约确认的事务时序（设计交接图，不是已实现功能）</text>
+  <text class="sub" x="40" y="74">所有写操作必须经过统一命令执行边界；本图给出顺序、校验点与冲突语义，供编码实现使用。黄色虚线框=待实现；蓝色实线框=迁移保留；绿色=事实源。</text>
+  <text class="sub" x="40" y="100">HTTP/SSE 是本系统自有协议，不是 OctoSense 官方 API；卡片不直连数据库，也不调用旧写路由。</text>
+
+  <!-- 生命线头部 -->
+  <rect class="box-todo" x="55" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="75" y="176">宿主原生卡片</text>
+  <text class="msg" x="75" y="196">Rust + Makepad（L0）</text>
+
+  <rect class="box-todo" x="385" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="405" y="176">后端命令 API</text>
+  <text class="msg" x="405" y="196">受控会话 / HTTP + SSE</text>
+
+  <rect class="box-todo" x="715" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="735" y="176">任务应用服务</text>
+  <text class="msg" x="735" y="196">application/</text>
+
+  <rect class="box-todo" x="1045" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="1065" y="176">统一命令执行边界</text>
+  <text class="msg" x="1065" y="196">校验 / 幂等 / 版本 / 回执</text>
+
+  <rect class="box-data" x="1365" y="150" width="230" height="56" rx="8"/>
+  <text class="h" x="1385" y="176">SQLite 单库</text>
+  <text class="msg" x="1385" y="196">runtime/repair.db（repair_*）</text>
+
+  <line class="life" x1="170" y1="206" x2="170" y2="1140"/>
+  <line class="life" x1="500" y1="206" x2="500" y2="1140"/>
+  <line class="life" x1="830" y1="206" x2="830" y2="1140"/>
+  <line class="life" x1="1160" y1="206" x2="1160" y2="1140"/>
+  <line class="life" x1="1480" y1="206" x2="1480" y2="1140"/>
+
+  <!-- 阶段 A -->
+  <text class="lbl" x="40" y="228">阶段 A：接单 accept_task（原子性 + 版本）</text>
+
+  <line class="a" x1="178" y1="256" x2="492" y2="256"/>
+  <text class="msg" x="335" y="234" text-anchor="middle">① accept_task(task_id, expected_version,</text>
+  <text class="msg" x="335" y="250" text-anchor="middle">idempotency_key)</text>
+
+  <line class="a" x1="508" y1="316" x2="822" y2="316"/>
+  <text class="msg" x="665" y="308" text-anchor="middle">② 解析服务端会话身份（不信任请求体角色与 user_id）</text>
+
+  <line class="a" x1="838" y1="376" x2="1152" y2="376"/>
+  <text class="msg" x="995" y="368" text-anchor="middle">③ 提交命令：身份 / 项目范围 + 前置状态校验</text>
+
+  <line class="a" x1="1168" y1="436" x2="1472" y2="436"/>
+  <text class="msg" x="1320" y="428" text-anchor="middle">④ BEGIN IMMEDIATE；读取承接者与 task.version</text>
+
+  <line class="ab" x1="1472" y1="496" x2="1168" y2="496"/>
+  <text class="msg" x="1320" y="472" text-anchor="middle">⑤ 原子 UPDATE ... WHERE version=? AND assignee IS NULL</text>
+  <text class="msg" x="1320" y="488" text-anchor="middle">受影响行数=1 才成功；0 行 → 409 VERSION_CONFLICT / ALREADY_ASSIGNED</text>
+
+  <line class="a" x1="1168" y1="556" x2="1472" y2="556"/>
+  <text class="msg" x="1320" y="548" text-anchor="middle">⑥ 写入 action_log + task_event（同一事务提交）</text>
+
+  <line class="ab" x1="1152" y1="616" x2="838" y2="616"/>
+  <text class="msg" x="995" y="608" text-anchor="middle">⑦ 回执 SUCCEEDED + 新版本号</text>
+
+  <line class="ab" x1="822" y1="676" x2="508" y2="676"/>
+  <text class="msg" x="665" y="668" text-anchor="middle">⑧ 任务投影：承接者、状态、可执行动作</text>
+
+  <line class="ab" x1="492" y1="736" x2="178" y2="736"/>
+  <text class="msg" x="335" y="728" text-anchor="middle">⑨ 200 回执；再 GET 最新投影，不使用本地假成功</text>
+
+  <!-- 阶段 B -->
+  <text class="lbl" x="40" y="786">阶段 B：预约提议与确认（提议不占资源，确认时查冲突）</text>
+
+  <line class="a" x1="178" y1="816" x2="492" y2="816"/>
+  <text class="msg" x="335" y="808" text-anchor="middle">⑩ propose_appointment(明确起止区间) → PROPOSED，旧提议 SUPERSEDED</text>
+
+  <line class="a" x1="178" y1="876" x2="492" y2="876"/>
+  <text class="msg" x="335" y="868" text-anchor="middle">⑪ confirm_appointment(appointment_id, expected_version, key)</text>
+
+  <line class="a" x1="508" y1="936" x2="1152" y2="936"/>
+  <text class="msg" x="830" y="928" text-anchor="middle">⑫ 命令：确认预约（仅该任务报修人，经理 P0 不代确认）</text>
+
+  <line class="a" x1="1168" y1="996" x2="1472" y2="996"/>
+  <text class="msg" x="1320" y="972" text-anchor="middle">⑬ 事务内校验：提议有效期 + 当前承接者</text>
+  <text class="msg" x="1320" y="988" text-anchor="middle">+ 同技工半开区间 [start,end) 冲突</text>
+
+  <line class="ab" x1="1472" y1="1056" x2="1168" y2="1056"/>
+  <text class="msg" x="1320" y="1048" text-anchor="middle">⑭ UPDATE appointment=CONFIRMED + task→SCHEDULED + 事件（同事务）</text>
+
+  <line class="ad" x1="1152" y1="1116" x2="178" y2="1116"/>
+  <text class="msg" x="665" y="1108" text-anchor="middle">⑮ 回读任务卡：预约起止时间、确认状态、下一步由谁处理、外部同步状态</text>
+
+  <!-- 底部说明 -->
+  <rect class="note" x="40" y="1160" width="490" height="130" rx="8"/>
+  <text class="h" x="56" y="1186">版本与幂等</text>
+  <text class="msg" x="56" y="1210">相同 idempotency_key 重试返回原回执，不重复建单、不重复确认。</text>
+  <text class="msg" x="56" y="1234">版本不一致返回 409，界面刷新投影后由用户重新决定。</text>
+  <text class="msg" x="56" y="1258">网络失败保留同一幂等键重试；外部同步未知只写 outbox，不让本地事务悬空。</text>
+
+  <rect class="note" x="550" y="1160" width="500" height="130" rx="8"/>
+  <text class="h" x="566" y="1186">同技工时间冲突</text>
+  <text class="msg" x="566" y="1210">冲突条件：existing.start &lt; new.end AND existing.end &gt; new.start。</text>
+  <text class="msg" x="566" y="1234">范围：同技工、同组织内全部项目、CONFIRMED；排除本任务将被替换的旧预约。</text>
+  <text class="msg" x="566" y="1258">只返回“该时间不可用”，不泄露其他任务的报修人与地址信息。</text>
+
+  <rect class="note" x="1070" y="1160" width="490" height="130" rx="8"/>
+  <text class="h" x="1086" y="1186">回读与恢复</text>
+  <text class="msg" x="1086" y="1210">写成功后一律按服务端版本回读投影；SSE 只是变更提示。</text>
+  <text class="msg" x="1086" y="1234">重连用事件游标，游标过旧则全量刷新；离线时标明缓存时间并禁用写操作。</text>
+  <text class="msg" x="1086" y="1258">停机恢复从持久化任务与动作记录开始，不重读聊天猜测已执行步骤。</text>
+</svg>
+</div></section><section id="deployment"><div class="sectionhead"><div><span class="eyebrow">ARCHITECTURE / 04</span><h2>部署与信任边界</h2><p>比赛主交付是原生宿主；Web用于回归与显式本地配对。</p></div><div class="tools"><button onclick="zoom(this)">原始尺寸</button><a href="diagrams/deployment.svg">SVG</a><a href="diagrams/deployment.mmd">Mermaid</a></div></div><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1400" height="960" viewBox="0 0 1400 960" role="img" aria-label="图 4 · 部署与信任边界"><defs><marker id="deployment-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#60798a"/></marker></defs><style>#deployment svg text{font-family:"PingFang SC","Microsoft YaHei",sans-serif;fill:#183447}#deployment svg .title{font-size:27px;font-weight:700}#deployment svg .head{font-size:20px;font-weight:650}#deployment svg .line{font-size:16px}#deployment svg .edge{fill:none;stroke:#60798a;stroke-width:2;marker-end:url(#deployment-arrow)}#deployment svg .sub{font-size:16px;fill:#617685}</style><rect width="1400" height="960" fill="#fcfdfd"/><text x="42" y="49" class="title">图 4 · 部署与信任边界</text><text x="42" y="79" class="sub">待实现设计 · 虚线表示宿主待验证或外部预留 · 本地业务状态真实持久化</text><rect x="24" y="106" width="1030" height="805" rx="20" fill="#f6f9fb" stroke="#c6d7e0"/><text x="47" y="140" class="head">同一台开发/演示桌面机器 · 默认仅 loopback</text><rect x="50" y="165" width="465" height="205" rx="14" fill="#fff5dc" stroke="#8ba8b8" stroke-width="1.5" stroke-dasharray="7 5"/><text x="70" y="197" class="head">robrix2 原生宿主（需扩展构建）</text><text x="70" y="228" class="line">固定 app_id / version / digest</text><text x="70" y="253" class="line">Rust + Makepad + Octoscript L0</text><text x="70" y="278" class="line">原生控件 → 受控权限 broker</text><text x="70" y="303" class="line">脚本不持有账号、后端或模型密钥</text><rect x="565" y="165" width="465" height="205" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="585" y="197" class="head">Web 回归与配对管理页</text><text x="585" y="228" class="line">TypeScript / Vite → 同源静态文件</text><text x="585" y="253" class="line">独立演示账号会话 + CSRF</text><text x="585" y="278" class="line">审批本次本地宿主配对</text><text x="585" y="303" class="line">普通网页成功 ≠ 原生宿主验收成功</text><rect x="50" y="445" width="980" height="190" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="70" y="477" class="head">FastAPI 模块化单进程后端 · 127.0.0.1:8711</text><text x="70" y="508" class="line">/api/tasks/v1 → 会话 / 项目 / 角色 → 任务与预约服务 → 统一命令执行</text><text x="70" y="533" class="line">HTTP 回执 + 投影回读；SSE / 原生版本轮询负责界面刷新</text><text x="70" y="558" class="line">数据库作业：短时模型运行、提议到期、站内提醒；写入同一执行边界</text><text x="70" y="583" class="line">WAGENT_MODE=contest：禁用尚未迁移的旧写路由、MCP 写工具及 reset</text><path class="edge" d="M282 370 V445"/><text x="85" y="413" class="sub">Bearer 仅由 broker 持有</text><path class="edge" d="M798 370 V445"/><text x="650" y="413" class="sub">同源 cookie / CSRF</text><rect x="50" y="700" width="465" height="155" rx="14" fill="#e9f5ef" stroke="#8ba8b8" stroke-width="1.5"/><text x="70" y="732" class="head">runtime/repair.db</text><text x="70" y="763" class="line">repair_* 任务 / 预约 / 回执 / 事件</text><text x="70" y="788" class="line">幂等、版本、同技工冲突、持久化作业</text><text x="70" y="813" class="line">参考 schema.sql；通过版本迁移安装</text><rect x="565" y="700" width="465" height="155" rx="14" fill="#e9f5ef" stroke="#8ba8b8" stroke-width="1.5"/><text x="585" y="732" class="head">runtime/attachments 与会话日志</text><text x="585" y="763" class="line">证据文件：按任务鉴权后下载</text><text x="585" y="788" class="line">JSONL：模型排障，不替代业务事务</text><text x="585" y="813" class="line">旧 ops.db 仅隔离回归，不双写</text><path class="edge" d="M282 635 V700"/><path class="edge" d="M798 635 V700"/><rect x="1080" y="200" width="290" height="185" rx="14" fill="#eef1ff" stroke="#8ba8b8" stroke-width="1.5"/><text x="1100" y="232" class="head">真实模型服务</text><text x="1100" y="263" class="line">兼容模型端点</text><text x="1100" y="288" class="line">key 仅后端持有</text><text x="1100" y="313" class="line">有用量与错误记录</text><text x="1100" y="338" class="line">假模型仅离线测试</text><path class="edge" d="M1030 510 H1058 V293 H1080"/><rect x="1080" y="550" width="290" height="210" rx="14" fill="#f2f3f4" stroke="#8ba8b8" stroke-width="1.5" stroke-dasharray="7 5"/><text x="1100" y="582" class="head">外部工单（预留）</text><text x="1100" y="613" class="line">DisabledConnector</text><text x="1100" y="638" class="line">NOT_CONFIGURED</text><text x="1100" y="663" class="line">无外部单号</text><text x="1100" y="688" class="line">无假成功 / 无真实投递</text><text x="1100" y="713" class="line">未来：回执 + 结果核对</text><path class="edge" d="M1030 575 H1080"/><text x="50" y="942" class="sub">G0须验证真实原生构建、配对、授权、一次读写回读与撤权；不承诺远端认证、手机或OS级桌面组件。</text></svg></div></section><section id="data"><div class="sectionhead"><div><span class="eyebrow">ARCHITECTURE / 05</span><h2>数据关系与事实归属</h2><p>本地任务权威、独立预约、验收证据、作业恢复与外部映射。</p></div><div class="tools"><button onclick="zoom(this)">原始尺寸</button><a href="diagrams/data.svg">SVG</a><a href="diagrams/data.mmd">Mermaid</a></div></div><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1400" height="990" viewBox="0 0 1400 990" role="img" aria-label="图 5 · 数据关系与事实归属"><defs><marker id="data-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#60798a"/></marker></defs><style>#data svg text{font-family:"PingFang SC","Microsoft YaHei",sans-serif;fill:#183447}#data svg .title{font-size:27px;font-weight:700}#data svg .head{font-size:20px;font-weight:650}#data svg .line{font-size:16px}#data svg .edge{fill:none;stroke:#60798a;stroke-width:2;marker-end:url(#data-arrow)}#data svg .sub{font-size:16px;fill:#617685}</style><rect width="1400" height="990" fill="#fcfdfd"/><text x="42" y="49" class="title">图 5 · 数据关系与事实归属</text><text x="42" y="79" class="sub">待实现设计 · 虚线表示宿主待验证或外部预留 · 本地业务状态真实持久化</text><rect x="40" y="135" width="410" height="195" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="60" y="167" class="head">身份与目录</text><text x="60" y="198" class="line">org / project / user / roles / skills</text><text x="60" y="223" class="line">space / asset / asset_serves</text><text x="60" y="248" class="line">设备安装位置与服务空间分开</text><text x="60" y="273" class="line">来源：DEMO / LOCAL_IMPORT / 外部快照</text><rect x="490" y="135" width="420" height="195" rx="14" fill="#e9f5ef" stroke="#8ba8b8" stroke-width="1.5"/><text x="510" y="167" class="head">repair_tasks · 本地业务权威</text><text x="510" y="198" class="line">本地 task_id / task_no / version</text><text x="510" y="223" class="line">reporter / assignee / asset / space</text><text x="510" y="248" class="line">状态机与独立 external_sync_state</text><text x="510" y="273" class="line">P0 authority_mode = LOCAL</text><rect x="950" y="135" width="410" height="195" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="970" y="167" class="head">repair_actions + repair_events</text><text x="970" y="198" class="line">org + actor + idempotency_key 唯一</text><text x="970" y="223" class="line">请求摘要 / 原回执 / 预期版本</text><text x="970" y="248" class="line">任务动作与事件同事务提交</text><text x="970" y="273" class="line">event.seq ≠ task.version</text><rect x="40" y="415" width="410" height="195" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="60" y="447" class="head">repair_appointments</text><text x="60" y="478" class="line">任务 → 多轮提议与确认</text><text x="60" y="503" class="line">同任务最多一份有效提议/确认</text><text x="60" y="528" class="line">同技工跨项目确认预约不重叠</text><text x="60" y="553" class="line">改约成功后替换旧预约</text><rect x="490" y="415" width="420" height="195" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="510" y="447" class="head">处置与验收证据</text><text x="510" y="478" class="line">progress / completions</text><text x="510" y="503" class="line">attachments / completion_attachments</text><text x="510" y="528" class="line">acceptances：通过 / 退回 / 代验收</text><text x="510" y="553" class="line">不同任务附件不能互相引用</text><rect x="950" y="415" width="410" height="195" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="970" y="447" class="head">作业与用户视图</text><text x="970" y="478" class="line">jobs：租约、到期、重试、去重</text><text x="970" y="503" class="line">notifications：事件+收件人+类型唯一</text><text x="970" y="528" class="line">pins：用户+任务唯一</text><text x="970" y="553" class="line">派生投影由后端按角色生成</text><rect x="40" y="740" width="410" height="160" rx="14" fill="#eef1ff" stroke="#8ba8b8" stroke-width="1.5"/><text x="60" y="772" class="head">模型运行记录</text><text x="60" y="803" class="line">agent_runs：任务基础版本、模型版本</text><text x="60" y="828" class="line">结果只为建议，不改任务事实</text><text x="60" y="853" class="line">会话JSONL用于排障，不是事务库</text><rect x="490" y="740" width="420" height="160" rx="14" fill="#f2f3f4" stroke="#8ba8b8" stroke-width="1.5" stroke-dasharray="7 5"/><text x="510" y="772" class="head">外部写入预留</text><text x="510" y="803" class="line">external_exports：相关ID、输出版本</text><text x="510" y="828" class="line">默认NOT_CONFIGURED / external_id=null</text><text x="510" y="853" class="line">不自动创建第二个外部事实源</text><rect x="950" y="740" width="410" height="160" rx="14" fill="#edf5fa" stroke="#8ba8b8" stroke-width="1.5"/><text x="970" y="772" class="head">会话与配对</text><text x="970" y="803" class="line">auth_sessions / host_pairings</text><text x="970" y="828" class="line">host_sessions：实例绑定、到期、撤销</text><text x="970" y="853" class="line">数据库仅存凭据哈希</text><path class="edge" d="M450 235 H490"/><path class="edge" d="M910 235 H950"/><path class="edge" d="M620 330 V373 H245 V415"/><path class="edge" d="M700 330 V415"/><path class="edge" d="M800 330 V373 H1155 V415"/><path class="edge" d="M620 610 V666 H245 V740"/><path class="edge" d="M700 610 V740"/><text x="40" y="954" class="sub">schema.sql是可执行参考结构；角色权限、业务状态、附件真实性仍须应用层校验。所有模块为设计目标。</text></svg></div></section></main></div><footer>以 docs/implementation/00_DECISIONS.md 和 04_DATA_API.md 为命名及接口依据。图册无需 CDN、外部字体或联网即可打开。图示与材料仅完成设计，未替代应用验收。</footer><script>function zoom(b){let d=b.closest('section').querySelector('.diagram');d.classList.toggle('actual');b.textContent=d.classList.contains('actual')?'适应宽度':'原始尺寸'}</script></body></html>

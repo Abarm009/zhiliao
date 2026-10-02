@@ -1,0 +1,16 @@
+flowchart TB
+  subgraph Desktop[同一台桌面机器]
+    Native[robrix2原生维修应用与Rust权限broker]
+    Web[Web回归与本地配对管理页]
+    API[FastAPI 127.0.0.1:8711]
+    Worker[同进程持久化作业worker]
+    DB[(runtime/repair.db)]
+    Files[runtime附件与会话日志]
+    Native -->|短期Bearer且脚本不可见| API
+    Web -->|同源cookie与CSRF| API
+    API --> DB
+    API --> Files
+    Worker -->|受控命令| API
+  end
+  API --> Model[真实模型兼容端点]
+  API -.-> Disabled[外部工单默认NOT_CONFIGURED]

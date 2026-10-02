@@ -1,0 +1,82 @@
+{
+  "review_date": "2026-09-29",
+  "method": "Read-only public source and PR state inspection; no runtime build or application execution.",
+  "shell_commit": "a5d847a2a5091c1274d68dd0de1f43c8b0215bf1",
+  "design_flow_commit": "9586a12044873267dddc39c3b56d7e94f3c6abfe",
+  "hub_reference_commit": "6741dea8d6b5e1a6062dfc23ae6b0d4240bcc747",
+  "files": [
+    {
+      "path": "Cargo.toml",
+      "bytes": 14185,
+      "sha256": "0118bc78f3864511c2019824c1a7bc5d26726e902229fabc40524cbc6985a08f",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/Cargo.toml"
+    },
+    {
+      "path": "apps/ai-providers/host-service/src/complete/mod.rs",
+      "bytes": 29060,
+      "sha256": "e26ae98a60d2420c87f9687cc4096d7b16de1a3837a472743b1cecf23f8d8c4c",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/apps/ai-providers/host-service/src/complete/mod.rs"
+    },
+    {
+      "path": "apps/ai-providers/host-service/src/lib.rs",
+      "bytes": 57906,
+      "sha256": "5e01d5ff9d29781e09f42ed0255146f20482b50c237cae1919a96dd635e5b870",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/apps/ai-providers/host-service/src/lib.rs"
+    },
+    {
+      "path": "crates/ai-host/README.md",
+      "bytes": 2392,
+      "sha256": "3b1513c6e0203786be9d195ad5b81c8ed6fa1d0f18f0047a8000412f2e349fec",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/crates/ai-host/README.md"
+    },
+    {
+      "path": "crates/ai-host/src/contained.rs",
+      "bytes": 10305,
+      "sha256": "073d84af698c7be6b75c59dcd1ec6ac47d0c4e7d30f4c819d887837d4caf4c7e",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/crates/ai-host/src/contained.rs"
+    },
+    {
+      "path": "crates/ai-host/src/lib.rs",
+      "bytes": 21188,
+      "sha256": "82433d703bbc777b5dfbc1229adb1698b6504c374118eabd479dfb6a10a43a18",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/crates/ai-host/src/lib.rs"
+    },
+    {
+      "path": "crates/shell/src/glance.rs",
+      "bytes": 29281,
+      "sha256": "737ab73ed863dbfe5d1b02e0445716bf1573f0b94e89e7156845093da6c0c531",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/crates/shell/src/glance.rs"
+    },
+    {
+      "path": "crates/shell/src/lib.rs",
+      "bytes": 248053,
+      "sha256": "7783142edc98567cdefa5eb8fece355e59f345aa15b7ec879de8c0877907d15c",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/crates/shell/src/lib.rs"
+    },
+    {
+      "path": "docs/ai-services.zh-CN.md",
+      "bytes": 36723,
+      "sha256": "b941cf909726fc3324aec9cd28472da7e998cdddbfa4184df078e4919f1845e6",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/docs/ai-services.zh-CN.md"
+    },
+    {
+      "path": "native-runtime.lock.json",
+      "bytes": 152,
+      "sha256": "3667b0bc0bdcfaca30253878556a8f7217d6a902c9241899d877adc1f58d43f2",
+      "url": "https://github.com/OctoSense-org/OctoSense/blob/a5d847a2a5091c1274d68dd0de1f43c8b0215bf1/native-runtime.lock.json"
+    }
+  ],
+  "course": {
+    "url": "https://meeting.tencent.com/crm/2pwMmVgx24",
+    "displayed_datetime": "2026/09/28 19:44",
+    "transcript_paragraph_ids": [
+      0,
+      98
+    ],
+    "paragraph_count": 99,
+    "missing_ids": [],
+    "last_paragraph_time": "01:29:44",
+    "player_duration_seconds": 5481.952,
+    "audio_fully_reviewed": false
+  }
+}

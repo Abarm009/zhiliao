@@ -1,0 +1,41 @@
+%% 图 2 · 业务状态机与转移表（设计交接图，不是已实现功能）
+%% 状态命名基准：docs/implementation/00_DECISIONS.md
+stateDiagram-v2
+  direction LR
+  [*] --> DRAFT : 报修人创建草稿（幂等：相同源事件返回同一草稿）
+  DRAFT --> OPEN : T1 提交报单（必填项目/问题原文/服务空间/症状/联系人）
+  OPEN --> ACCEPTED : T2 技工原子接单 或 经理分配（事件标注“经理分配”）
+  ACCEPTED --> SCHEDULED : T3 报修人确认预约（事务内冲突检查）
+  SCHEDULED --> IN_PROGRESS : T4 承接技工开工（有效预约 + 已绑定主设备）
+  IN_PROGRESS --> AWAITING_ACCEPTANCE : T5 技工提交完工（处置说明 + 证据附件）
+  AWAITING_ACCEPTANCE --> COMPLETED : T6 报修人验收 / 经理有理由代验收
+  AWAITING_ACCEPTANCE --> IN_PROGRESS : T7 验收退回（理由必填，保留前次证据）
+  SCHEDULED --> ACCEPTED : T8 经理改派（未开工；旧预约释放、旧提议取消）
+  DRAFT --> CANCELLED : T9 报修人取消
+  OPEN --> CANCELLED : T9 报修人取消
+  ACCEPTED --> CANCELLED : T9 经理取消（理由必填）
+  SCHEDULED --> CANCELLED : T9 经理取消（理由必填）
+  IN_PROGRESS --> CANCELLED : T9 经理取消（理由必填；不得静默换人）
+  SCHEDULED --> SCHEDULED : T10 预约超时（仅提示，需重新预约）
+  COMPLETED --> [*]
+  CANCELLED --> [*]
+
+  note right of ACCEPTED
+    预约确认不改变资源占用前提：
+    提议不预占技工资源，确认时在事务内检查
+    同技工、同组织全部项目、CONFIRMED 预约的半开区间 [start,end) 冲突。
+    第一份预约被拒绝或过期时任务仍为 ACCEPTED。
+  end note
+
+  note right of IN_PROGRESS
+    完工不等于验收；验收通过才 COMPLETED。
+    处置事件子类 INSPECTION / REPAIR / WAITING_PARTS / NOTE，
+    不新增隐式状态，不提供自由百分比进度。
+  end note
+
+  note left of CANCELLED
+    COMPLETED / CANCELLED 为终止态，不可直接修改历史状态；
+    再次故障创建新任务并可关联历史任务。
+    动作状态 SUCCEEDED / REJECTED / FAILED 与外部同步状态
+    NOT_CONFIGURED / PENDING / SUCCEEDED / FAILED / UNKNOWN 独立记录。
+  end note

@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1660" width="1600" height="1660" role="img" aria-label="图1 系统与模块依赖：设计交接图，非已实现功能">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#374151"/>
+    </marker>
+    <marker id="ah-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a6d1a"/>
+    </marker>
+  </defs>
+  <style>
+    text{font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;fill:#1f2933}
+    .ttl{font-size:24px;font-weight:700;fill:#111827}
+    .sub{font-size:15px;fill:#4b5563}
+    .h{font-size:17px;font-weight:700;fill:#111827}
+    .b{font-size:15px}
+    .s{font-size:15px;fill:#4b5563}
+    .m{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;fill:#374151}
+    .lbl{font-size:15px;font-weight:700;fill:#374151}
+    .now{fill:#eef4ff;stroke:#2f6fdb;stroke-width:2}
+    .todo{fill:#fff8e6;stroke:#c8871a;stroke-width:2;stroke-dasharray:10 6}
+    .ext{fill:#f3f4f6;stroke:#6b7280;stroke-width:2;stroke-dasharray:2 6}
+    .data{fill:#eaf7ef;stroke:#1f8a4c;stroke-width:2}
+    .gate{fill:#fdeeee;stroke:#c0392b;stroke-width:2}
+    .a{stroke:#374151;stroke-width:2;fill:none;marker-end:url(#ah)}
+    .ad{stroke:#8a6d1a;stroke-width:2;fill:none;stroke-dasharray:9 5;marker-end:url(#ah-d)}
+  </style>
+  <rect x="0" y="0" width="1600" height="1660" fill="#ffffff"/>
+
+  <text class="ttl" x="40" y="46">图 1 · 系统与模块依赖（设计交接图，不是已实现功能）</text>
+  <text class="sub" x="40" y="74">命名与范围基准：docs/implementation/00_DECISIONS.md。蓝色实线框=迁移保留/现有；黄色虚线框=待实现；灰色点线框=外部预留；绿色=事实源存储；红色=接入门/未验证风险。</text>
+
+  <rect class="now" x="40" y="90" width="22" height="20" rx="3"/><text class="s" x="70" y="106">迁移保留 / 现有</text>
+  <rect class="todo" x="250" y="90" width="22" height="20" rx="3"/><text class="s" x="280" y="106">待实现</text>
+  <rect class="ext" x="410" y="90" width="22" height="20" rx="3"/><text class="s" x="440" y="106">外部预留</text>
+  <rect class="data" x="580" y="90" width="22" height="20" rx="3"/><text class="s" x="610" y="106">事实源 / 持久化</text>
+  <rect class="gate" x="790" y="90" width="22" height="20" rx="3"/><text class="s" x="820" y="106">接入门 / 未验证风险</text>
+
+  <rect class="todo" x="60" y="150" width="1480" height="100" rx="8"/>
+  <text class="h" x="80" y="182">robrix2 桌面宿主（官方发布包，版本待核对）</text>
+  <text class="b" x="80" y="210">原生维修小程序：Rust + Makepad + 固定 Octoscript L0 界面 —— 比赛主交付 UI，宿主内窗口展示任务列表与同一任务卡。</text>
+  <text class="s" x="80" y="236">不是 OS 级桌面置顶小组件，不是网页链接跳转；官方原生示例无 WebView，新应用须扩展宿主并经接入门验证。</text>
+
+  <rect class="gate" x="60" y="286" width="700" height="110" rx="8"/>
+  <text class="h" x="80" y="316">宿主权限 broker（须扩展宿主，未验证）</text>
+  <text class="b" x="80" y="344">能力声明、权限询问、受控会话凭据；Rust / Octoscript 宿主改法依官方 SDK 与固定版本决定。</text>
+  <text class="s" x="80" y="370">不能把浏览器网页当作原生接入，也不能假设宿主已提供网络或存储能力。</text>
+
+  <rect class="todo" x="800" y="286" width="740" height="110" rx="8"/>
+  <text class="h" x="820" y="316">后端受控会话 / 命令 API（HTTP + SSE，待实现）</text>
+  <text class="b" x="820" y="344">会话身份由服务端建立；卡片只调命令 API，不直连数据库、不直连旧写接口、不携带可信角色字段。</text>
+  <text class="s" x="820" y="370">HTTP/SSE 是本系统自有协议，不宣称是 OctoSense 官方 API。</text>
+  <line class="ad" x1="762" y1="341" x2="796" y2="341"/>
+  <text class="lbl" x="640" y="278">凭据 / 受控会话</text>
+
+  <rect class="todo" x="60" y="432" width="1480" height="88" rx="8"/>
+  <text class="h" x="80" y="462">身份与授权（待实现）</text>
+  <text class="b" x="80" y="490">服务器会话身份 · 角色 REPORTER / TECHNICIAN / MANAGER / SYSTEM · 项目与技能范围核验 · 权限按当前项目判定，不信任请求体中的 user_id 与角色。</text>
+  <line class="a" x1="440" y1="396" x2="440" y2="430"/>
+  <line class="a" x1="1170" y1="396" x2="1170" y2="430"/>
+
+  <rect class="todo" x="60" y="556" width="760" height="132" rx="8"/>
+  <text class="h" x="80" y="586">任务应用服务 application/（待实现）</text>
+  <text class="b" x="80" y="614">任务生命周期与版本、预约、设备绑定、完工与验收、任务投影读取与动作授权。</text>
+  <text class="m" x="80" y="642">DRAFT → OPEN → ACCEPTED → SCHEDULED → IN_PROGRESS</text>
+  <text class="m" x="80" y="666">→ AWAITING_ACCEPTANCE → COMPLETED（终止分支 CANCELLED）</text>
+
+  <rect class="todo" x="860" y="556" width="680" height="132" rx="8"/>
+  <text class="h" x="880" y="586">任务协议与投影 task_contracts/（待实现）</text>
+  <text class="b" x="880" y="614">事件输入、任务读取、动作提交、验收提交；卡片投影与事件游标。</text>
+  <text class="s" x="880" y="642">独立版本化，不改写旧 ops/contracts；重复投递不重复建单。</text>
+  <text class="s" x="880" y="668">投影只是读取视图，数据库状态才是事实。</text>
+
+  <rect class="now" x="60" y="724" width="760" height="124" rx="8"/>
+  <text class="h" x="80" y="754">Agent 推理与记忆检索（复用现有 ops/agent、llm/）</text>
+  <text class="b" x="80" y="782">真实模型执行结构化抽取、设备与历史检索、建议与阶段摘要；事实来自工具与数据库。</text>
+  <text class="s" x="80" y="808">模型只提建议：不能指定可信身份、写任意 SQL、伪造进度、单方确认预约或验收；</text>
+  <text class="s" x="80" y="832">输出校验失败可限定一次修复重试，仍失败转人工表单。</text>
+
+  <rect class="ext" x="860" y="724" width="680" height="124" rx="8"/>
+  <text class="h" x="880" y="754">模型服务（外部，必须真实配置）</text>
+  <text class="b" x="880" y="782">OpenAI 兼容接口或本地推理；密钥放本地 backend/.env，不入库、不提交。</text>
+  <text class="s" x="880" y="808">未配置时人工业务仍可执行，但真实模型验收不通过。</text>
+  <text class="s" x="880" y="832">禁止用假模型或录播结果冒充真实模型验证。</text>
+
+  <rect class="gate" x="60" y="884" width="1480" height="112" rx="8"/>
+  <text class="h" x="80" y="914">统一命令执行边界（待实现）—— 唯一业务副作用入口</text>
+  <text class="b" x="80" y="942">身份/范围校验 · 前置状态校验 · 幂等键 · 预期版本与冲突检测 · 回执 · 任务状态、动作记录与事件在同一事务提交。</text>
+  <text class="s" x="80" y="968">旧 runner、旧 HTTP 写路由、MCP、调度器与全部 UI 必须经此边界；只读查询不创建任务，不产生业务副作用。</text>
+  <line class="a" x1="440" y1="688" x2="440" y2="722"/>
+  <line class="a" x1="440" y1="848" x2="440" y2="882"/>
+  <line class="a" x1="1200" y1="688" x2="1200" y2="882"/>
+
+  <rect class="todo" x="60" y="1032" width="1480" height="88" rx="8"/>
+  <text class="h" x="80" y="1062">旧契约/历史查询保留；新仓储 repair_data/ 待实现</text>
+  <text class="b" x="80" y="1090">backend/src/wagent_backend/ops/tools/ · ops/data/ · ops/contracts/　旧契约保持兼容，新协议单独版本化，旧枚举经显式映射转换。</text>
+  <line class="a" x1="440" y1="996" x2="440" y2="1030"/>
+
+  <rect class="data" x="60" y="1156" width="760" height="124" rx="8"/>
+  <text class="h" x="80" y="1186">SQLite 新任务库 runtime/repair.db（新 repair_* 表）</text>
+  <text class="b" x="80" y="1214">新增 repair_* 任务、预约、设备、事件表；会话、图谱与附件同样固定在 runtime/。</text>
+  <text class="s" x="80" y="1240">单进程单库，不拆微服务；运行数据不写回代码目录。</text>
+
+  <rect class="todo" x="860" y="1156" width="680" height="124" rx="8"/>
+  <text class="h" x="880" y="1186">任务事件与卡片投影（待实现）</text>
+  <text class="b" x="880" y="1214">动作记录 + 事件序号 + 卡片投影，供断线重连与游标恢复。</text>
+  <text class="s" x="880" y="1240">重启恢复从持久化记录开始，不让模型重读聊天猜测已执行步骤。</text>
+  <line class="a" x1="440" y1="1120" x2="440" y2="1154"/>
+  <line class="a" x1="1200" y1="996" x2="1200" y2="1154"/>
+
+  <rect class="todo" x="60" y="1316" width="760" height="104" rx="8"/>
+  <text class="h" x="80" y="1346">持久化调度器 SYSTEM（待实现）</text>
+  <text class="b" x="80" y="1374">提议到期、预约提醒、待验收提醒；仅执行已编码动作。</text>
+  <text class="s" x="80" y="1400">不作为通用超级用户，不自动派工、不自动验收、不自动完成。</text>
+
+  <rect class="now" x="860" y="1316" width="680" height="104" rx="8"/>
+  <text class="h" x="880" y="1346">旧 Web 页面与旧 runner（迁移保留，回归入口）</text>
+  <text class="b" x="880" y="1374">仅用于开发回归与排障；不是新卡片 UI，也不承载比赛主交互。</text>
+  <text class="s" x="880" y="1400">比赛运行模式下，旧写入口接入统一边界前禁用。</text>
+
+  <rect class="ext" x="60" y="1456" width="470" height="150" rx="8"/>
+  <text class="h" x="80" y="1486">外部工单系统</text>
+  <text class="b" x="80" y="1514">external_sync_state = NOT_CONFIGURED（默认）</text>
+  <text class="s" x="80" y="1540">禁用适配器 + 版本化输出契约；</text>
+  <text class="s" x="80" y="1564">本地任务号与外部单号分开显示。</text>
+  <text class="s" x="80" y="1588">绝不生成假单号或假成功回执。</text>
+
+  <rect class="ext" x="560" y="1456" width="470" height="150" rx="8"/>
+  <text class="h" x="580" y="1486">OctoSense 官方 SDK / 宿主能力</text>
+  <text class="b" x="580" y="1514">未安装、未验证、未接通。</text>
+  <text class="s" x="580" y="1540">接入前固定发布包版本，记录支持系统</text>
+  <text class="s" x="580" y="1564">与能力清单；最小验证为宿主卡片读取</text>
+  <text class="s" x="580" y="1588">本地任务 → 确认 → 回读回执。</text>
+
+  <rect class="ext" x="1060" y="1456" width="480" height="150" rx="8"/>
+  <text class="h" x="1080" y="1486">消息通知（短信 / 企微 / 系统通知）</text>
+  <text class="b" x="1080" y="1514">未接通。</text>
+  <text class="s" x="1080" y="1540">P0 仅应用内持久化通知；界面不得</text>
+  <text class="s" x="1080" y="1564">显示“已送达”。外部同步状态与任务</text>
+  <text class="s" x="1080" y="1588">状态相互独立。</text>
+
+  <polyline class="ad" points="60,1368 40,1368 40,940 60,940"/>
+  <text class="lbl" x="20" y="1345" transform="rotate(-90 20 1345)">调度写入同边界</text>
+  <polyline class="ad" points="1540,1368 1560,1368 1560,940 1540,940"/>
+  <text class="lbl" x="1554" y="1345" transform="rotate(-90 1554 1345)">旧写入口须收敛</text>
+  <polyline class="ad" points="1540,1530 1586,1530 1586,962 1540,962"/>
+  <text class="lbl" x="1580" y="1345" transform="rotate(-90 1580 1345)">外部预留适配</text>
+</svg>
