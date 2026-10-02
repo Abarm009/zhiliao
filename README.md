@@ -77,6 +77,6 @@ backend/.venv/bin/python scripts/test_baseline.py
 
 > 请先读 AGENTS.md、docs/ARCHITECTURE.md、docs/MIGRATION.md、docs/VERIFICATION.md，**以及 docs/build-loop/REVIEW_2026-10-02.md（当前问题清单与修复顺序）**，再按 docs/implementation/README.md 阅读设计包。以05_IMPLEMENTATION_ACCEPTANCE.md的完整接手提示和G0–G5实施；不要把旧演示页面或预留目录当成OctoSense已接入，不将设计检查通过写成业务功能已实现，**也不要把 ACCEPTANCE.json 里的 PASS 当成已独立复核的结论**。
 
-## 发布状态
+## 迁移阶段发布说明（历史）
 
-本目录目前是内部开发交接包，没有自动为原代码及数据重新授予开源许可。赛方要求 Apache 2.0 开源；公开前需确认原代码授权、第三方资源声明和种子数据可公开范围。此处不复制私有部署资料，也不替用户发布仓库。
+以下为迁移阶段的历史说明，实际仓库登记以文首及[提交记录](docs/build-loop/REPOSITORY_SUBMISSION_2026-10-02.md)为准：本目录当时是内部开发交接包，没有自动为原代码及数据重新授予开源许可。赛方要求 Apache 2.0 开源；当时尚未发布仓库。本次仓库登记未另外变更已有代码及第三方资源的许可声明。
