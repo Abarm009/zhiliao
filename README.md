@@ -4,6 +4,20 @@
 
 **2026-10-02 提交说明**：本次登记源码仓库地址，不代表应用已通过全部验收。最近一次独立复核见 [修复核验报告](docs/build-loop/REPAIR_VERIFICATION_2026-10-02.md)；下方历史状态、测试数字和版本需按记录时间解读。运行数据、密钥、虚拟环境及官方参考克隆不提交。发布准备与范围见 [仓库提交记录](docs/build-loop/REPOSITORY_SUBMISSION_2026-10-02.md)。
 
+**OctoSense App Flow 摘要**：本项目作为脚本应用（Script App / octoscript 应用）提交，按官方 [`app-hub-submission.md`](https://raw.githubusercontent.com/gosimfoundation/hackathon-agenticapp26/main/docs/app-hub-submission.md) §"所有作品需要的材料"六项 + [`PUBLISHING.md`](https://github.com/OctoSense-org/OctoSense-App-Hub/blob/main/docs/PUBLISHING.md) 规范整理。详细见 [`docs/PROJECT.md`](docs/PROJECT.md)；Hub gate 等价自检见该文件 §十。
+
+| OctoSense 场景 | 落点 | 接入 |
+|---|---|---|
+| 写作 / 创作（writing/creation） | 报修原话 / 处置记录 / 完工说明 / 备注 / 钉选 | ✅ 核心 |
+| 系统 / 设备（system/devices） | 设备身份 / 空间服务关系 / 隔离存储 | ✅ 核心 |
+| 生产力（productivity） | 工作台 + 命令边界 + 状态机 | ✅ 核心 |
+| 日历（calendar） | `repair_appointments` 预约窗口 | ⚠ 内部实现 |
+| 邮件 / 即时消息（mail / messaging） | 站内通知 + 撤权失效；不连 Rinx Matrix | ⚠ 仅站内 |
+| 购物 / 物流（shopping / logistics） | 设备服务关系 (`repair_asset_services`) | ⚠ 预留接口 |
+| 天气 / 新闻 / 音乐 / 视频 / 行情 / 导航 | — | ❌ 不在范围 |
+
+**bundle 入口**：`app/bundle/`（`manifest.json` schema 1 / `listing.json` / `main.splash` / `assets/icon.svg` / `screenshots/01-main.png`）；宿主 `card-host --bundle app/bundle --allow-unsigned`（独立 sandbox，详见 `docs/PROJECT.md` §三）。**Agent 任务演示**（input → execute → verify → human confirm 全链）见 `docs/PROJECT.md` §五。
+
 **10月2日（当前）：全盘 review 后本地**未就绪**。台账 **24 PASS / 29 NOT_RUN / 8 FAIL / 3 BLOCKED**（合计 64）；3 项 BLOCKED 是 **P06/P07/P08 外部递交授权**，不是 jobs/LLM。10-01 自评的 33 PASS 中有 **9 项被改判**（T01→NOT_RUN，T02/T03/T05/T08/T16/T17/T18/T29→FAIL），其中 5 项为 P0。问题清单、复现命令与修改建议见 [docs/build-loop/REVIEW_2026-10-02.md](docs/build-loop/REVIEW_2026-10-02.md)，本轮执行记录见 [docs/VERIFICATION.md](docs/VERIFICATION.md)。`check_build_loop.py --ready` 返回 NOT READY。**
 
 **10月1日（历史）：L0-L6 主切片本地 ready，33/64 项 PASS、3 项 BLOCKED。该自评偏乐观，已被 10-02 review 修正，仅作历史证据保留。**

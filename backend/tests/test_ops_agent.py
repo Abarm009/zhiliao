@@ -14,7 +14,7 @@ from wagent_backend.ops.data.db import connect, init_db
 from wagent_backend.ops.data.seed import seed
 from wagent_backend.ops.tools.context import ToolContext
 
-from conftest import stream_of
+from _baseline_helpers import stream_of
 
 AS_OF = datetime(2026, 8, 23, 10, 0)
 

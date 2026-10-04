@@ -12,7 +12,7 @@ from wagent_backend.llm.embedder import local_embed
 from wagent_backend.web import routes_ops
 from wagent_backend.web.app import create_app
 
-from conftest import stream_of
+from _baseline_helpers import stream_of
 
 DECISION = (
     '```json\n{"space_id": "SP-A-25-E", "asset_id": "FCU-A25-01", '

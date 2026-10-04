@@ -133,3 +133,58 @@ class InvalidKind(OctoSenseError):
     http_status = 422
     def __init__(self, detail: str = "invalid kind"):
         super().__init__(self.code, detail, self.http_status)
+
+class InvalidVersion(OctoSenseError):
+    code = "INVALID_VERSION"
+    http_status = 422
+    def __init__(self, detail: str = "expected_version must be a strict positive integer"):
+        super().__init__(self.code, detail, self.http_status)
+
+
+class SkillMismatch(OctoSenseError):
+    code = "SKILL_MISMATCH"
+    http_status = 403
+    def __init__(self, detail: str = "skill does not match task category"):
+        super().__init__(self.code, detail, self.http_status)
+
+
+class ServiceRelationMissing(OctoSenseError):
+    code = "SERVICE_RELATION_MISSING"
+    http_status = 422
+    def __init__(self, detail: str = "asset has no effective service relation to the task space"):
+        super().__init__(self.code, detail, self.http_status)
+
+
+class SpaceRequired(OctoSenseError):
+    code = "SPACE_REQUIRED"
+    http_status = 422
+    def __init__(self, detail: str = "confirmed service space required"):
+        super().__init__(self.code, detail, self.http_status)
+
+
+class EvidenceIntegrity(OctoSenseError):
+    code = "EVIDENCE_INTEGRITY"
+    http_status = 422
+    def __init__(self, detail: str = "evidence file missing or corrupted"):
+        super().__init__(self.code, detail, self.http_status)
+
+
+class AppointmentExpired(OctoSenseError):
+    code = "APPOINTMENT_EXPIRED"
+    http_status = 410
+    def __init__(self, detail: str = "appointment proposal expired"):
+        super().__init__(self.code, detail, self.http_status)
+
+
+class AppointmentWindowInvalid(OctoSenseError):
+    code = "APPOINTMENT_WINDOW_INVALID"
+    http_status = 422
+    def __init__(self, detail: str = "appointment window violates product defaults"):
+        super().__init__(self.code, detail, self.http_status)
+
+
+class InvalidRoleFilter(OctoSenseError):
+    code = "INVALID_ROLE_FILTER"
+    http_status = 403
+    def __init__(self, detail: str = "role filter is not one of the caller's own roles"):
+        super().__init__(self.code, detail, self.http_status)

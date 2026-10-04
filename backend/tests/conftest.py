@@ -1,9 +1,29 @@
-"""迁移基线占位文件（被本工程有意改写）。
+"""backend/tests 顶层 conftest：继承基线测试的公共 helper + 数据隔离。
 
-原始 79 迁移基线此文件为 2730 字节 / sha256 61b8940cab270337557cdaba1e1c4fdbe220a3fc95655f1f2716ea91c19c143c。
-原始仓库不可访问以重建精确字节；本工程修改如下：
-  - 不在本目录下提供 octosense_backend 测试 fixture（避免污染原基线文件）
-  - 新 fixture 全部放在 backend/tests/octosense_backend/conftest.py
-  - verify_migration.py 仍能识别本文件为基线变更，需配合 VERIFICATION.md 解释
+修复 V11 / 交接指令 §6.2：
+  - `backend/tests/octosense_backend/conftest.py` 与 `backend/tests/conftest.py`
+    同名，pytest 收集时 `from conftest import stream_of` 会解析到最近的那个，
+    继承的 test_ops_agent / test_ops_api 因此收集失败。这里在 tests 顶层重新
+    提供同一份 helper，让 `from conftest import ...` 稳定解析到本文件。
+  - helper 从旧 WAgent 工作区**复制**而非依赖它（不引用旧目录，也不改旧代码）。
+  - 数据文件指向临时目录，不污染 runtime/ops.db。
 """
-# 空白占位：本工程的 pytest fixture 在 tests/octosense_backend/conftest.py。
+from __future__ import annotations
+
+import os
+
+import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_data_file(tmp_path_factory: pytest.TempPathFactory):
+    path = tmp_path_factory.mktemp("kg") / "kg.json"
+    os.environ["WAGENT_KG_DATA"] = str(path)
+    os.environ.setdefault("WAGENT_OPS_SIMSEED", "0")
+    os.environ.setdefault("OCTOSENSE_DB", str(path.parent / "octosense.db"))
+    os.environ.setdefault("OCTOSENSE_EVIDENCE_ROOT", str(path.parent / "evidence"))
+    yield
+    os.environ.pop("WAGENT_KG_DATA", None)
+
+
+from _baseline_helpers import chunks_of, stream_of  # noqa: E402,F401

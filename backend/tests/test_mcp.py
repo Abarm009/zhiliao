@@ -40,4 +40,6 @@ async def test_stdio_server_list_and_call():
             )
             assert not result.is_error
             text = result.content[0].text
-            assert "气体灭火气瓶间" in text and "汇金广场" in text
+            # 种子数据把项目实体命名为“示范广场项目部”（别名“示范广场”）；
+            # 断言跟随当前种子事实，而不是旧名称。
+            assert "气体灭火气瓶间" in text and "示范广场" in text

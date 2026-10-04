@@ -1,350 +1,376 @@
-"""扩展命令：覆盖 L3-L7 的剩余 P0 用例。
+"""扩展命令：设备、证据、收藏、处置建议、列表视图。
 
 修复：
-  - N01: bind_asset / unbind_asset 完整阶段角色校验 + 终态禁写
-  - N04: history_advice 严格按当前任务可见性 + 项目
-  - N13: quarantine_evidence 验证归属 + rowcount
-  - R-P1-3/N07: record_advice 增加权限校验与幂等回放
-  - N07: 统一 payload_hash 幂等
-  - N16: 移除 install_extended_schema 与 EXTRA_SCHEMA 死代码
-
-所有命令均通过 Database.tx() 原子事务；事件写入 repair_events；
-命令动作写入 repair_actions；与既有 executor 共享幂等键/版本约束。
+  - V02/V03：list_tasks / get_history_advice / 证据 / 收藏 全部改用
+    `authorization.task_visible` 的同一对象可见性规则；role 过滤只能缩小。
+  - V04：`_check_role` 真正检查 allowed；IN_PROGRESS 换设备必须同项目经理 + 理由，
+    并保存旧值/新值/操作者。
+  - V07：普通编码走 asset_code；`asset:<asset_id>` 走稳定 asset_id，再校验项目与归档。
+  - V08：upload 用暂存→原子改名；completion 侧另有附件完整性校验。
+  - V09：绑定必须满足“服务空间—设备”有效服务关系，不只是同项目。
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-import time
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from octosense_backend import authorization as auth
+from octosense_backend import idempotency as idem
+from octosense_backend.commands import CommandExecutor, _EVIDENCE_MIME_PREFIXES
 from octosense_backend.db import Database
 from octosense_backend.errors import (
-    AssetNotFound,
     AssetArchived,
+    AssetNotFound,
+    DraftMissingField,
     EvidenceNotFound,
-    EvidenceTooLarge,
     EvidenceQuarantined,
+    EvidenceTooLarge,
     IllegalTransition,
+    InvalidKind,
     InvalidProjectReference,
     OctoSenseError,
     PermissionDenied,
+    ServiceRelationMissing,
+    SpaceRequired,
     TaskNotFound,
     VersionConflict,
 )
 
+# 命令级源状态
+BIND_ALLOWED_STATES = {"DRAFT", "OPEN", "ACCEPTED", "SCHEDULED", "IN_PROGRESS"}
 
-def _now_ms() -> int:
-    return int(time.time() * 1000)
+_SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]")
 
 
 def _uuid() -> str:
     return uuid.uuid4().hex
 
 
-def canonical_payload_hash(payload: dict) -> str:
-    canon = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
-
-
-# 命令级源状态：bind/unbind 允许阶段
-BIND_ALLOWED_STATES = {"DRAFT", "OPEN", "ACCEPTED", "SCHEDULED", "IN_PROGRESS"}
+def safe_filename(name: str) -> str:
+    """去掉路径分隔与危险字符，避免目录穿越。"""
+    base = os.path.basename(name or "")
+    base = _SAFE_NAME.sub("_", base)
+    return base[:120] or "unnamed"
 
 
 class ExtendedCommands:
-    """覆盖 L3-L7 的剩余命令。"""
-
-    def __init__(self, db: Database, evidence_root: str | Path | None = None,
-                 clock: Callable[[], int] | None = None):
+    def __init__(self, db: Database, evidence_root=None,
+                 clock: Callable[[], int] | None = None,
+                 executor: CommandExecutor | None = None,
+                 max_evidence_bytes: int | None = None):
         self.db = db
-        # R-P1-7：默认 evidence_root 锚到工程根的 runtime/evidence（不再跟 CWD 浮动）
-        if evidence_root:
-            self.evidence_root = Path(evidence_root)
-        else:
-            self.evidence_root = Path(__file__).resolve().parents[3] / "runtime" / "evidence"
+        from octosense_backend.paths import default_evidence_root
+        self.evidence_root = Path(evidence_root) if evidence_root else default_evidence_root()
         self.evidence_root.mkdir(parents=True, exist_ok=True)
-        self.max_evidence_bytes = int(os.environ.get("OCTOSENSE_EVIDENCE_MAX_BYTES", str(8 * 1024 * 1024)))
-        self._clock = clock or _now_ms
+        self.max_evidence_bytes = int(
+            max_evidence_bytes
+            if max_evidence_bytes is not None
+            else os.environ.get("OCTOSENSE_EVIDENCE_MAX_BYTES", str(10 * 1024 * 1024)))
+        self._clock = clock
+        self.executor = executor or CommandExecutor(db, clock=clock)
+        if clock is not None:
+            self.executor._clock = clock
 
-    # -------- helpers --------
+    # ---------- helpers ----------
 
-    def _check_idempotency(self, cur, actor_id: str, idem_key: str, payload_hash: str) -> dict | None:
-        row = cur.execute(
-            "SELECT result, command, task_id, action_id, payload_hash FROM repair_actions "
-            "WHERE actor_id=? AND idempotency_key=?",
-            (actor_id, idem_key),
-        ).fetchone()
+    def now(self) -> int:
+        return int(self._clock() if self._clock else __import__("time").time() * 1000)
+
+    def _run(self, *, command: str, actor_id: str, idem_key: str, task_id: str | None,
+             expected_version: int | None, params: dict, body: Callable[[Any, str | None], dict]):
+        return self.executor._run(command=command, actor_id=actor_id, idem_key=idem_key,
+                                  task_id=task_id, expected_version=expected_version,
+                                  params=params, body=body)
+
+    def _resolve(self, conn, task_id: str) -> dict:
+        row = conn.execute("SELECT * FROM repair_tasks WHERE task_id=?", (task_id,)).fetchone()
         if row is None:
-            return None
-        if row["result"] != "OK":
-            raise IdempotencyConflict(
-                f"previous action failed: command={row['command']}"
-            )
-        if row["payload_hash"] is not None and row["payload_hash"] != payload_hash:
-            raise IdempotencyConflict("idempotency_key reused with different payload")
-        return {
-            "idempotent_replay": True, "task_id": row["task_id"], "command": row["command"],
-            "action_id": row["action_id"],
-        }
+            raise TaskNotFound(task_id)
+        return dict(row)
 
-    def _record_action(self, cur, actor_id: str, idem_key: str, command: str,
-                       project_id: str | None, task_id: str | None,
-                       expected_version: int | None, result: str,
-                       payload_hash: str | None = None,
-                       error_code: str | None = None, error_detail: str | None = None) -> str:
-        action_id = _uuid()
-        cur.execute(
-            "INSERT INTO repair_actions (action_id, idempotency_key, actor_id, project_id, command, "
-            "task_id, expected_version, result, error_code, error_detail, payload_hash, created_at_ms) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (action_id, idem_key, actor_id, project_id, command, task_id, expected_version,
-             result, error_code, error_detail, payload_hash, _now_ms()),
-        )
-        return action_id
+    def _check_role(self, conn, project_id: str, actor_id: str, allowed: set[str]) -> set[str]:
+        """真正检查 allowed（修复 V04）：旧实现只判断项目成员存在。"""
+        return self.executor._check_actor_role(project_id, actor_id, allowed)
 
-    def _check_role(self, cur, project_id: str, actor_id: str, allowed: set[str]) -> set[str]:
-        rows = cur.execute(
-            "SELECT role FROM repair_roles WHERE user_id=? AND project_id=?",
-            (actor_id, project_id),
-        ).fetchall()
-        roles = {r["role"] for r in rows}
-        if not roles:
-            raise PermissionDenied("actor not in this project")
+    def _resolve_actor(self, conn, project_id: str, actor_id: str, allowed: set[str]) -> set[str]:
+        roles = self.executor._check_actor_role(project_id, actor_id, allowed,
+                                                allow_manager=True)
         return roles
 
-    def _resolve_actor(self, cur, project_id: str, actor_id: str, allowed: set[str]) -> set[str]:
-        """统一角色解析：Manager 可代行同项目任何命令；其他角色须在 allowed 中。"""
-        roles = self._check_role(cur, project_id, actor_id, allowed)
-        if "MANAGER" in roles:
-            return roles
-        if not (roles & allowed):
-            raise PermissionDenied(f"actor needs one of {sorted(allowed)}")
-        return roles
+    # ---------- 设备（T07/T08/T09） ----------
 
-    def actor_resolver_any_project(self, actor_id: str) -> set[str]:
-        """辅助：检查 actor 在任意项目中的角色（用于区分 401/403）。"""
-        conn = self.db.conn()
-        try:
-            rows = conn.execute(
-                "SELECT role FROM repair_roles WHERE user_id=?", (actor_id,),
-            ).fetchall()
-            return {r["role"] for r in rows}
-        finally:
-            conn.close()
-
-    # -------- 设备匹配/绑定 (T07/T08/T09) --------
+    def resolve_asset(self, conn, project_id: str, code: str) -> dict:
+        """普通编码 → asset_code；`asset:<asset_id>` → 稳定 asset_id。"""
+        raw = (code or "").strip()
+        if not raw or len(raw) > 128:
+            raise OctoSenseError("ASSET_CODE_INVALID", "code empty or too long", http_status=422)
+        if raw.startswith("asset:"):
+            asset_id = raw[len("asset:"):].strip()
+            if not asset_id:
+                raise OctoSenseError("ASSET_CODE_INVALID", "asset: payload empty",
+                                     http_status=422)
+            row = conn.execute(
+                "SELECT asset_id, project_id, asset_code, display_name, source, active "
+                "FROM repair_assets WHERE asset_id=?", (asset_id,)).fetchone()
+            if row is None:
+                raise AssetNotFound(f"asset_id {asset_id} not found")
+            if row["project_id"] != project_id:
+                raise AssetNotFound("asset belongs to another project")
+            if not row["active"]:
+                raise AssetArchived(asset_id)
+            return dict(row)
+        rows = conn.execute(
+            "SELECT asset_id, project_id, asset_code, display_name, source, active "
+            "FROM repair_assets WHERE asset_code=?", (raw,)).fetchall()
+        hits = [dict(r) for r in rows
+                if r["project_id"] == project_id and r["active"]]
+        if not hits:
+            raise AssetNotFound(f"no active asset in project {project_id} with code {raw}")
+        return hits[0] if len(hits) == 1 else {"matches": hits}
 
     def match_assets_by_code(self, actor_id: str, project_id: str, code: str) -> dict:
-        """按编码或 asset: 载荷解析设备；伪造 ID/其他项目 ID/归档设备拒绝。"""
         with self.db.tx() as conn:
             cur = conn.cursor()
-            self._resolve_actor(cur, project_id, actor_id, {"REPORTER", "TECHNICIAN", "MANAGER"})
-            asset_code = code.removeprefix("asset:") if code.startswith("asset:") else code
-            if not asset_code or len(asset_code) > 64:
-                raise OctoSenseError("ASSET_CODE_INVALID", "code too long or empty", http_status=422)
+            self._resolve_actor(cur, project_id, actor_id,
+                                {"REPORTER", "TECHNICIAN", "MANAGER"})
+            raw = (code or "").strip()
+            if raw.startswith("asset:"):
+                asset = self.resolve_asset(cur, project_id, raw)
+                return {"code": raw, "matches": [asset], "resolved_by": "asset_id"}
+            if not raw or len(raw) > 128:
+                raise OctoSenseError("ASSET_CODE_INVALID", "code empty or too long",
+                                     http_status=422)
             rows = cur.execute(
-                "SELECT asset_id, project_id, asset_code, display_name, source, active "
-                "FROM repair_assets WHERE asset_code=?",
-                (asset_code,),
+                "SELECT asset_id, asset_code, display_name, source, active "
+                "FROM repair_assets WHERE project_id=? AND asset_code=?", (project_id, raw)
             ).fetchall()
             hits = []
             for r in rows:
-                if r["project_id"] != project_id:
-                    continue
                 if not r["active"]:
                     continue
-                hits.append({
-                    "asset_id": r["asset_id"],
-                    "asset_code": r["asset_code"],
-                    "display_name": r["display_name"],
-                    "source": r["source"],
-                })
+                hits.append({"asset_id": r["asset_id"], "asset_code": r["asset_code"],
+                             "display_name": r["display_name"], "source": r["source"]})
             if not hits:
-                raise AssetNotFound(f"no active asset in this project with code {asset_code}")
-            return {"matches": hits, "code": asset_code}
+                raise AssetNotFound(f"no active asset in this project with code {raw}")
+            return {"code": raw, "matches": hits, "resolved_by": "asset_code"}
 
     def bind_asset(self, actor_id: str, idem_key: str, task_id: str,
-                   asset_id: str, expected_version: int) -> dict:
-        """绑定设备到任务；要求在同项目、未归档。
+                   asset_id: str, expected_version: int, reason: str = "") -> dict:
+        idem.strict_positive_int(expected_version)
+        if not asset_id:
+            raise DraftMissingField("asset_id required")
 
-        N01：阶段+主体规则
-          - DRAFT：仅原报修人
-          - OPEN / ACCEPTED / SCHEDULED：报修人或当前承接者；MANAGER 仅"修改原因"
-          - IN_PROGRESS：仅 manager；带 reason 强制
-          - COMPLETED / CANCELLED：拒绝
-        """
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "asset_id": asset_id, "expected_version": expected_version,
-        })
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, status, version, asset_id, assignee_id, reporter_id "
-                "FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            if row["status"] not in BIND_ALLOWED_STATES:
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            if task["status"] not in BIND_ALLOWED_STATES:
                 raise IllegalTransition(
-                    f"cannot bind asset in terminal state {row['status']}"
-                )
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            asset = cur.execute(
+                    f"cannot bind asset in terminal state {task['status']}")
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
+            asset = conn.execute(
                 "SELECT asset_id, project_id, active, asset_code, display_name, source "
-                "FROM repair_assets WHERE asset_id=?",
-                (asset_id,),
-            ).fetchone()
+                "FROM repair_assets WHERE asset_id=?", (asset_id,)).fetchone()
             if asset is None:
                 raise AssetNotFound(asset_id)
-            if asset["project_id"] != row["project_id"]:
+            if asset["project_id"] != task["project_id"]:
                 raise InvalidProjectReference("asset not in task's project")
             if not asset["active"]:
                 raise AssetArchived(asset_id)
-            # 阶段权限
-            status = row["status"]
+            status = task["status"]
+            # R3-02：第一次写操作必须先验证主体仍是当前项目成员。
+            # 撤权后即使 actor_id 与原报修人/原承接者匹配，roles_of 仍返回空集。
+            # 下面按状态做矩阵检查前，先确保 actor 仍是该项目成员：
+            member_roles = self._check_role(
+                conn, task["project_id"], actor_id,
+                {"REPORTER", "TECHNICIAN", "MANAGER"})
+            is_manager = "MANAGER" in member_roles
+            # R2-09 / R3-05：按业务基线显式按阶段定义主体权限矩阵：
+            #   DRAFT                              → 原报修人
+            #   OPEN                               → 本项目经理
+            #   ACCEPTED / SCHEDULED               → 当前承接技工 或 本项目经理
+            #   IN_PROGRESS                        → 本项目经理（理由必填）
+            #   AWAITING_ACCEPTANCE/COMPLETED/CANCELLED → 拒绝（只能走合法退回流程）
+            is_reporter = actor_id == task["reporter_id"]
+            is_assignee = (task["assignee_id"] is not None
+                           and actor_id == task["assignee_id"])
             if status == "DRAFT":
-                if actor_id != row["reporter_id"]:
+                if not (is_reporter and "REPORTER" in member_roles):
                     raise PermissionDenied("only original reporter can bind asset in DRAFT")
+            elif status == "OPEN":
+                if not is_manager:
+                    raise PermissionDenied("only project manager can bind asset in OPEN")
+            elif status in {"ACCEPTED", "SCHEDULED"}:
+                if not (is_assignee or is_manager):
+                    raise PermissionDenied(
+                        "only current assignee or manager can bind asset at "
+                        f"{status} stage")
             elif status == "IN_PROGRESS":
-                # 经理修改设备：必须带 reason；这里只调入 reason；扩展可在 api 层补字段
-                roles = self._check_role(cur, row["project_id"], actor_id, {"MANAGER"})
-            else:  # OPEN/ACCEPTED/SCHEDULED
-                roles = self._check_role(cur, row["project_id"], actor_id,
-                                         {"REPORTER", "TECHNICIAN", "MANAGER"})
-                is_reporter = actor_id == row["reporter_id"]
-                is_assignee = actor_id == row["assignee_id"]
-                is_manager = "MANAGER" in roles
-                if not (is_reporter or is_assignee or is_manager):
-                    raise PermissionDenied("only reporter, current assignee, or manager can bind asset")
-            old_asset_id = row["asset_id"]
-            cur.execute(
-                "UPDATE repair_tasks SET asset_id=?, version=version+1, updated_at_ms=? WHERE task_id=?",
-                (asset_id, _now_ms(), task_id),
-            )
-            new_ver = row["version"] + 1
-            self._record_action(cur, actor_id, idem_key, "bind_asset",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash)
-            cur.execute(
-                "INSERT INTO repair_events (task_id, task_version, event_type, actor_id, before_state, after_state, at_ms) "
-                "VALUES (?,?,?,?,?,?,?)",
-                (task_id, new_ver, "bind_asset", actor_id,
-                 json.dumps({"asset_id": old_asset_id}, ensure_ascii=False),
-                 json.dumps({"asset_id": asset_id, "asset_code": asset["asset_code"]}, ensure_ascii=False),
-                 _now_ms()),
-            )
-            return {
-                "task_id": task_id, "asset_id": asset_id,
-                "asset_code": asset["asset_code"], "version": new_ver,
-            }
+                # V04：仅同项目经理 + 必填理由
+                if not is_manager:
+                    raise PermissionDenied(
+                        "only project manager can rebind asset during IN_PROGRESS")
+                if not (reason or "").strip():
+                    raise DraftMissingField(
+                        "changing the asset during IN_PROGRESS requires a reason")
+            else:
+                # AWAITING_ACCEPTANCE / COMPLETED / CANCELLED
+                raise IllegalTransition(
+                    f"cannot rebind asset in {status} stage; must cancel + reopen")
+            # V09/T08：必须存在有效“服务空间—设备”服务关系
+            if not task.get("space_id"):
+                raise SpaceRequired(
+                    "bind an asset only after the task has a confirmed service space")
+            if not auth.service_relation_ok(conn, asset_id, task["space_id"]):
+                raise ServiceRelationMissing(
+                    f"asset {asset['asset_code']} does not service space "
+                    f"{task['space_id']}; same install location is not a service relation")
+            old_asset_id = task["asset_id"]
+            conn.execute(
+                "UPDATE repair_tasks SET asset_id=?, version=version+1, updated_at_ms=? "
+                "WHERE task_id=?", (asset_id, self.now(), task_id))
+            new_ver = task["version"] + 1
+            self.executor._record_event(
+                conn, task_id, new_ver, "bind_asset", actor_id,
+                {"asset_id": old_asset_id, "status": status},
+                {"asset_id": asset_id, "asset_code": asset["asset_code"],
+                 "reason": reason or None, "operator": actor_id,
+                 "services_space_id": task["space_id"]})
+            return {"task_id": task_id, "asset_id": asset_id,
+                    "asset_code": asset["asset_code"], "task_version": new_ver,
+                    "previous_asset_id": old_asset_id, "reason": reason or None}
+
+        res = self._run(command="bind_asset", actor_id=actor_id, idem_key=idem_key,
+                        task_id=task_id, expected_version=expected_version,
+                        params={"task_id": task_id, "asset_id": asset_id,
+                                "expected_version": expected_version,
+                                "reason": reason or ""},
+                        body=body)
+        return res.data
 
     def unbind_asset(self, actor_id: str, idem_key: str, task_id: str,
                      expected_version: int, reason: str) -> dict:
-        """解绑设备，要求带 reason；IN_PROGRESS 只能经理。"""
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        if not reason.strip():
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "reason required", http_status=422)
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "expected_version": expected_version, "reason": reason,
-        })
+        idem.strict_positive_int(expected_version)
+        if not (reason or "").strip():
+            raise DraftMissingField("reason required")
+
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            if task["status"] not in BIND_ALLOWED_STATES:
+                raise IllegalTransition(f"cannot unbind asset in terminal state {task['status']}")
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
+            # R3-02：先验证仍是当前项目成员；R3-05：unbind 与 bind 共用阶段/主体矩阵
+            member_roles = self._check_role(
+                conn, task["project_id"], actor_id,
+                {"REPORTER", "TECHNICIAN", "MANAGER"})
+            is_manager = "MANAGER" in member_roles
+            is_reporter = actor_id == task["reporter_id"]
+            is_assignee = (task["assignee_id"] is not None
+                           and actor_id == task["assignee_id"])
+            status = task["status"]
+            if status == "DRAFT":
+                if not (is_reporter and "REPORTER" in member_roles):
+                    raise PermissionDenied(
+                        "only original reporter can unbind asset in DRAFT")
+            elif status == "OPEN":
+                if not is_manager:
+                    raise PermissionDenied(
+                        "only project manager can unbind asset in OPEN")
+            elif status in {"ACCEPTED", "SCHEDULED"}:
+                if not (is_assignee or is_manager):
+                    raise PermissionDenied(
+                        "only current assignee or manager can unbind asset at "
+                        f"{status} stage")
+            elif status == "IN_PROGRESS":
+                if not is_manager:
+                    raise PermissionDenied(
+                        "only project manager can unbind asset during IN_PROGRESS")
+                if not (reason or "").strip():
+                    raise DraftMissingField(
+                        "unbinding asset during IN_PROGRESS requires a reason")
+            else:
+                raise IllegalTransition(
+                    f"cannot unbind asset in {status} stage; must cancel + reopen")
+            old_asset_id = task["asset_id"]
+            conn.execute(
+                "UPDATE repair_tasks SET asset_id=NULL, version=version+1, updated_at_ms=? "
+                "WHERE task_id=?", (self.now(), task_id))
+            new_ver = task["version"] + 1
+            self.executor._record_event(
+                conn, task_id, new_ver, "unbind_asset", actor_id,
+                {"asset_id": old_asset_id, "status": task["status"]},
+                {"asset_id": None, "reason": reason, "operator": actor_id})
+            return {"task_id": task_id, "asset_id": None, "task_version": new_ver,
+                    "previous_asset_id": old_asset_id, "reason": reason}
+
+        res = self._run(command="unbind_asset", actor_id=actor_id, idem_key=idem_key,
+                        task_id=task_id, expected_version=expected_version,
+                        params={"task_id": task_id, "expected_version": expected_version,
+                                "reason": reason},
+                        body=body)
+        return res.data
+
+    def get_asset_detail(self, actor_id: str, asset_id: str, project_id: str) -> dict:
         with self.db.tx() as conn:
             cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
+            self._resolve_actor(cur, project_id, actor_id,
+                                {"REPORTER", "TECHNICIAN", "MANAGER"})
             row = cur.execute(
-                "SELECT project_id, status, version, asset_id, assignee_id, reporter_id "
-                "FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
+                "SELECT asset_id, project_id, asset_code, display_name, source, active "
+                "FROM repair_assets WHERE asset_id=?", (asset_id,)).fetchone()
             if row is None:
-                raise TaskNotFound(task_id)
-            if row["status"] not in BIND_ALLOWED_STATES:
-                raise IllegalTransition(f"cannot unbind asset in terminal state {row['status']}")
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            roles = self._check_role(cur, row["project_id"], actor_id, {"REPORTER", "TECHNICIAN", "MANAGER"})
-            is_reporter = actor_id == row["reporter_id"]
-            is_assignee = actor_id == row["assignee_id"]
-            is_manager = "MANAGER" in roles
-            if not (is_reporter or is_assignee or is_manager):
-                raise PermissionDenied("only reporter, current assignee, or manager can unbind asset")
-            if row["status"] == "IN_PROGRESS" and not is_manager:
-                raise PermissionDenied("only manager can change asset during IN_PROGRESS")
-            cur.execute(
-                "UPDATE repair_tasks SET asset_id=NULL, version=version+1, updated_at_ms=? WHERE task_id=?",
-                (_now_ms(), task_id),
-            )
-            new_ver = row["version"] + 1
-            self._record_action(cur, actor_id, idem_key, "unbind_asset",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash, error_detail=reason)
-            cur.execute(
-                "INSERT INTO repair_events (task_id, task_version, event_type, actor_id, after_state, at_ms) "
-                "VALUES (?,?,?,?,?,?)",
-                (task_id, new_ver, "unbind_asset", actor_id,
-                 json.dumps({"asset_id": None, "reason": reason}, ensure_ascii=False), _now_ms()),
-            )
-            return {"task_id": task_id, "asset_id": None, "version": new_ver, "reason": reason}
+                raise AssetNotFound(asset_id)
+            if row["project_id"] != project_id:
+                raise InvalidProjectReference("asset not in project")
+            return {"asset": dict(row),
+                    "services_space_ids": auth.asset_services(cur, asset_id),
+                    "installed_at_space_ids": auth.asset_locations(cur, asset_id)}
 
-    # -------- 证据附件 (T19) --------
+    # ---------- 证据附件（T19/T30） ----------
 
     def upload_evidence(self, actor_id: str, idem_key: str, task_id: str,
                         filename: str, mime_type: str, payload: bytes,
                         expected_version: int) -> dict:
-        """上传证据附件。仅本任务参与者 + 经理可传；超限/类型非法拒绝。"""
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        if not filename.strip():
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "filename required", http_status=422)
+        idem.strict_positive_int(expected_version)
+        filename = safe_filename(filename)
+        if not filename or not (filename or "").strip():
+            raise DraftMissingField("filename required")
         if not payload:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "payload empty", http_status=422)
+            raise DraftMissingField("payload empty")
         if len(payload) > self.max_evidence_bytes:
             raise EvidenceTooLarge(f"max {self.max_evidence_bytes} bytes")
-        # MIME 限制
-        allowed_mime_prefixes = ("image/", "text/", "application/json", "application/octet-stream")
-        if not any(mime_type.startswith(p) for p in allowed_mime_prefixes):
+        if not any(mime_type.startswith(p) for p in _EVIDENCE_MIME_PREFIXES):
             raise OctoSenseError("EVIDENCE_MIME_REJECTED", mime_type, http_status=422)
         sha = hashlib.sha256(payload).hexdigest()
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "expected_version": expected_version,
-            "filename": filename, "mime_type": mime_type, "sha256": sha,
-        })
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, status, version, reporter_id, assignee_id "
-                "FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            roles = self._check_role(cur, row["project_id"], actor_id,
-                                     {"REPORTER", "TECHNICIAN", "MANAGER"})
-            is_reporter = actor_id == row["reporter_id"]
-            is_assignee = actor_id == row["assignee_id"]
+
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
+            roles = auth.roles_of(conn, actor_id, task["project_id"])
+            is_reporter = actor_id == task["reporter_id"]
+            is_assignee = (task["assignee_id"] is not None
+                           and actor_id == task["assignee_id"])
             is_manager = "MANAGER" in roles
             if not (is_reporter or is_assignee or is_manager):
-                raise PermissionDenied("only reporter, current assignee, or manager can upload evidence")
+                raise PermissionDenied(
+                    "only reporter, current assignee, or manager can upload evidence")
+            existing = conn.execute(
+                "SELECT COUNT(*) AS n FROM repair_evidence WHERE task_id=? AND status='READY'",
+                (task_id,)).fetchone()["n"]
+            if existing >= 10:
+                raise OctoSenseError("EVIDENCE_QUOTA", "max 10 evidence items per task",
+                                     http_status=422)
             evidence_id = _uuid()
             target_dir = self.evidence_root / task_id
             target_dir.mkdir(parents=True, exist_ok=True)
@@ -354,362 +380,336 @@ class ExtendedCommands:
                 tmp_path.write_bytes(payload)
                 tmp_path.rename(target_path)
             except Exception:
-                if tmp_path.exists():
-                    tmp_path.unlink()
+                for p in (tmp_path, target_path):
+                    try:
+                        if p.exists():
+                            p.unlink()
+                    except OSError:
+                        pass
                 raise
-            cur.execute(
-                "INSERT INTO repair_evidence (evidence_id, task_id, uploader_id, filename, mime_type, "
-                "byte_size, sha256, storage_path, status, created_at_ms) "
+            conn.execute(
+                "INSERT INTO repair_evidence (evidence_id, task_id, uploader_id, filename, "
+                "mime_type, byte_size, sha256, storage_path, status, created_at_ms) "
                 "VALUES (?,?,?,?,?,?,?,?, 'READY', ?)",
-                (evidence_id, task_id, actor_id, filename, mime_type, len(payload),
-                 sha, str(target_path), _now_ms()),
-            )
-            self._record_action(cur, actor_id, idem_key, "upload_evidence",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash)
-            return {
-                "evidence_id": evidence_id, "task_id": task_id,
-                "filename": filename, "byte_size": len(payload), "sha256": sha,
-            }
+                (evidence_id, task_id, actor_id, filename, mime_type, len(payload), sha,
+                 str(target_path), self.now()))
+            return {"evidence_id": evidence_id, "task_id": task_id,
+                    "filename": filename, "byte_size": len(payload), "sha256": sha,
+                    "task_version": task["version"]}
+
+        res = self._run(command="upload_evidence", actor_id=actor_id, idem_key=idem_key,
+                        task_id=task_id, expected_version=expected_version,
+                        params={"task_id": task_id, "expected_version": expected_version,
+                                "filename": filename, "mime_type": mime_type, "sha256": sha},
+                        body=body)
+        return res.data
 
     def list_evidence(self, actor_id: str, task_id: str) -> dict:
         with self.db.tx() as conn:
             cur = conn.cursor()
-            row = cur.execute(
-                "SELECT project_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            self._resolve_actor(cur, row["project_id"], actor_id,
-                                {"REPORTER", "TECHNICIAN", "MANAGER"})
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
             rows = cur.execute(
-                "SELECT evidence_id, filename, mime_type, byte_size, sha256, status, uploader_id, created_at_ms "
-                "FROM repair_evidence WHERE task_id=? ORDER BY created_at_ms",
-                (task_id,),
-            ).fetchall()
+                "SELECT evidence_id, filename, mime_type, byte_size, sha256, status, "
+                "uploader_id, created_at_ms FROM repair_evidence WHERE task_id=? "
+                "ORDER BY created_at_ms", (task_id,)).fetchall()
             return {"task_id": task_id, "evidence": [dict(r) for r in rows]}
 
     def download_evidence(self, actor_id: str, task_id: str, evidence_id: str) -> dict:
-        """返回证据 payload + 元数据，供下载/校验使用。"""
         with self.db.tx() as conn:
             cur = conn.cursor()
-            row = cur.execute(
-                "SELECT project_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            self._resolve_actor(cur, row["project_id"], actor_id,
-                                {"REPORTER", "TECHNICIAN", "MANAGER"})
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
             ev = cur.execute(
                 "SELECT * FROM repair_evidence WHERE evidence_id=? AND task_id=?",
-                (evidence_id, task_id),
-            ).fetchone()
+                (evidence_id, task_id)).fetchone()
             if ev is None:
                 raise EvidenceNotFound(evidence_id)
             if ev["status"] == "QUARANTINED":
                 raise EvidenceQuarantined(evidence_id)
-            payload = Path(ev["storage_path"]).read_bytes()
-            actual_sha = hashlib.sha256(payload).hexdigest()
-            if actual_sha != ev["sha256"]:
+            path = Path(ev["storage_path"])
+            if not path.exists():
+                raise EvidenceNotFound(f"{evidence_id} file missing from storage")
+            payload = path.read_bytes()
+            if hashlib.sha256(payload).hexdigest() != ev["sha256"]:
                 raise EvidenceQuarantined(f"sha mismatch on {evidence_id}")
-            return {
-                "evidence_id": evidence_id,
-                "filename": ev["filename"],
-                "mime_type": ev["mime_type"],
-                "byte_size": ev["byte_size"],
-                "payload": payload,
-                "sha256": ev["sha256"],
-            }
+            return {"evidence_id": evidence_id, "filename": ev["filename"],
+                    "mime_type": ev["mime_type"], "byte_size": ev["byte_size"],
+                    "payload": payload, "sha256": ev["sha256"]}
 
     def quarantine_evidence(self, actor_id: str, idem_key: str, task_id: str,
                             evidence_id: str, expected_version: int, reason: str) -> dict:
-        """经理/报修人标记证据为隔离。
+        idem.strict_positive_int(expected_version)
+        if not (reason or "").strip():
+            raise DraftMissingField("reason required")
 
-        N13：必须验证证据归属当前任务，否则 404；UPDATE 后必须影响行数。
-        """
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        if not reason.strip():
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "reason required", http_status=422)
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "evidence_id": evidence_id, "expected_version": expected_version,
-            "reason": reason,
-        })
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, version, reporter_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            roles = self._check_role(cur, row["project_id"], actor_id, {"REPORTER", "MANAGER"})
-            is_reporter = actor_id == row["reporter_id"]
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
+            # R3-02：第一次写必须先验证主体仍是当前项目成员
+            roles = auth.roles_of(conn, actor_id, task["project_id"])
+            if not roles:
+                raise PermissionDenied(f"actor not in project {task['project_id']}")
+            is_reporter = actor_id == task["reporter_id"] and "REPORTER" in roles
             is_manager = "MANAGER" in roles
             if not (is_reporter or is_manager):
                 raise PermissionDenied("only reporter or manager can quarantine evidence")
-            ev = cur.execute(
-                "SELECT status FROM repair_evidence WHERE evidence_id=? AND task_id=?",
-                (evidence_id, task_id),
-            ).fetchone()
+            ev = conn.execute(
+                "SELECT evidence_id FROM repair_evidence WHERE evidence_id=? AND task_id=?",
+                (evidence_id, task_id)).fetchone()
             if ev is None:
                 raise EvidenceNotFound(evidence_id)
-            cur.execute(
-                "UPDATE repair_evidence SET status='QUARANTINED' WHERE evidence_id=? AND task_id=?",
-                (evidence_id, task_id),
-            )
-            self._record_action(cur, actor_id, idem_key, "quarantine_evidence",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash, error_detail=reason)
-            return {"evidence_id": evidence_id, "status": "QUARANTINED", "reason": reason}
+            changed = conn.execute(
+                "UPDATE repair_evidence SET status='QUARANTINED' "
+                "WHERE evidence_id=? AND task_id=?", (evidence_id, task_id)).rowcount
+            if changed != 1:
+                raise EvidenceNotFound(evidence_id)
+            self.executor._record_event(
+                conn, task_id, task["version"] + 1, "quarantine_evidence", actor_id,
+                {"evidence_id": evidence_id}, {"status": "QUARANTINED", "reason": reason})
+            conn.execute(
+                "UPDATE repair_tasks SET version=version+1, updated_at_ms=? WHERE task_id=?",
+                (self.now(), task_id))
+            return {"evidence_id": evidence_id, "status": "QUARANTINED",
+                    "reason": reason, "task_version": task["version"] + 1}
 
-    # -------- 收藏 (T30) --------
+        res = self._run(command="quarantine_evidence", actor_id=actor_id, idem_key=idem_key,
+                        task_id=task_id, expected_version=expected_version,
+                        params={"task_id": task_id, "evidence_id": evidence_id,
+                                "expected_version": expected_version, "reason": reason},
+                        body=body)
+        return res.data
+
+    # ---------- 收藏（T30） ----------
 
     def add_pin(self, actor_id: str, idem_key: str, task_id: str) -> dict:
-        payload_hash = canonical_payload_hash({"task_id": task_id})
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, status FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            self._resolve_actor(cur, row["project_id"], actor_id,
-                                {"REPORTER", "TECHNICIAN", "MANAGER"})
-            try:
-                cur.execute(
-                    "INSERT INTO repair_pins (project_id, user_id, task_id, created_at_ms) VALUES (?,?,?,?)",
-                    (row["project_id"], actor_id, task_id, _now_ms()),
-                )
-            except Exception:
-                # 已存在
-                pass
-            self._record_action(cur, actor_id, idem_key, "add_pin",
-                                row["project_id"], task_id, None, "OK",
-                                payload_hash=payload_hash)
-            return {"task_id": task_id, "pinned": True}
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
+            conn.execute(
+                "INSERT OR IGNORE INTO repair_pins (project_id, user_id, task_id, created_at_ms) "
+                "VALUES (?,?,?,?)", (task["project_id"], actor_id, task_id, self.now()))
+            return {"task_id": task_id, "pinned": True, "task_version": task["version"]}
+
+        return self._run(command="add_pin", actor_id=actor_id, idem_key=idem_key,
+                         task_id=task_id, expected_version=None,
+                         params={"task_id": task_id}, body=body).data
 
     def remove_pin(self, actor_id: str, idem_key: str, task_id: str) -> dict:
-        payload_hash = canonical_payload_hash({"task_id": task_id})
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            self._resolve_actor(cur, row["project_id"], actor_id,
-                                {"REPORTER", "TECHNICIAN", "MANAGER"})
-            cur.execute(
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
+            removed = conn.execute(
                 "DELETE FROM repair_pins WHERE user_id=? AND task_id=?",
-                (actor_id, task_id),
-            )
-            self._record_action(cur, actor_id, idem_key, "remove_pin",
-                                row["project_id"], task_id, None, "OK",
-                                payload_hash=payload_hash)
-            return {"task_id": task_id, "pinned": False}
+                (actor_id, task_id)).rowcount
+            return {"task_id": task_id, "pinned": False, "removed": bool(removed),
+                    "task_version": task["version"]}
+
+        return self._run(command="remove_pin", actor_id=actor_id, idem_key=idem_key,
+                         task_id=task_id, expected_version=None,
+                         params={"task_id": task_id}, body=body).data
 
     def list_pins(self, actor_id: str) -> dict:
         with self.db.tx() as conn:
             cur = conn.cursor()
             rows = cur.execute(
-                "SELECT p.task_id, p.created_at_ms, t.status, t.problem_text "
+                "SELECT p.task_id, p.created_at_ms, t.status, t.problem_text, t.project_id, "
+                "t.category, t.reporter_id, t.assignee_id, t.version AS task_version "
                 "FROM repair_pins p JOIN repair_tasks t ON t.task_id=p.task_id "
                 "WHERE p.user_id=? ORDER BY p.created_at_ms DESC",
-                (actor_id,),
-            ).fetchall()
-            return {"pins": [dict(r) for r in rows]}
+                (actor_id,)).fetchall()
+            pins = [dict(r) for r in rows
+                    if auth.task_visible(cur, actor_id, r)]
+            return {"pins": pins}
 
-    # -------- 记录处置（IN_PROGRESS 期间） --------
+    # ---------- 处置记录 ----------
 
     def record_progress(self, actor_id: str, idem_key: str, task_id: str,
-                        note: str, expected_version: int) -> dict:
-        """技工在 IN_PROGRESS 期间记处置；存 events 不改 status。"""
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        if not note.strip():
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "note required", http_status=422)
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "expected_version": expected_version, "note": note,
-        })
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, status, version, assignee_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            if row["status"] != "IN_PROGRESS":
-                raise IllegalTransition(f"record_progress requires IN_PROGRESS, got {row['status']}")
-            if row["assignee_id"] != actor_id:
-                raise PermissionDenied("only assignee can record progress")
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            new_ver = row["version"] + 1
-            cur.execute(
-                "UPDATE repair_tasks SET version=?, updated_at_ms=? WHERE task_id=?",
-                (new_ver, _now_ms(), task_id),
-            )
-            cur.execute(
-                "INSERT INTO repair_events (task_id, task_version, event_type, actor_id, after_state, at_ms) "
-                "VALUES (?,?,?,?,?,?)",
-                (task_id, new_ver, "record_progress", actor_id,
-                 json.dumps({"note": note}, ensure_ascii=False), _now_ms()),
-            )
-            self._record_action(cur, actor_id, idem_key, "record_progress",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash)
-            return {"task_id": task_id, "version": new_ver, "note": note}
+                        note: str, kind: str, expected_version: int) -> dict:
+        """IN_PROGRESS 期间记处置；子类 INSPECTION/REPAIR/WAITING_PARTS/NOTE。"""
+        idem.strict_positive_int(expected_version)
+        if not (note or "").strip():
+            raise DraftMissingField("note required")
+        if kind not in {"INSPECTION", "REPAIR", "WAITING_PARTS", "NOTE"}:
+            raise InvalidKind(kind)
 
-    # -------- 任务列表与查询（L5 视图） --------
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            if task["status"] != "IN_PROGRESS":
+                raise IllegalTransition(
+                    f"record_progress requires IN_PROGRESS, got {task['status']}")
+            if task["assignee_id"] != actor_id:
+                raise PermissionDenied("only current assignee can record progress")
+            # R2-05：除"仍是承接者"之外，必须仍是本项目内的 TECHNICIAN；
+            # 被移出项目或撤掉角色 → 拒绝，避免撤权后仍能写。
+            roles = self.executor._check_actor_role(
+                task["project_id"], actor_id, {"TECHNICIAN"}, allow_manager=False)
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
+            new_ver = task["version"] + 1
+            conn.execute("UPDATE repair_tasks SET version=?, updated_at_ms=? WHERE task_id=?",
+                         (new_ver, self.now(), task_id))
+            self.executor._record_event(
+                conn, task_id, new_ver, "record_progress", actor_id,
+                {"status": task["status"]},
+                {"note": note, "kind": kind, "operator": actor_id})
+            return {"task_id": task_id, "task_version": new_ver, "note": note, "kind": kind}
+
+        return self._run(command="record_progress", actor_id=actor_id, idem_key=idem_key,
+                         task_id=task_id, expected_version=expected_version,
+                         params={"task_id": task_id, "expected_version": expected_version,
+                                 "note": note, "kind": kind},
+                         body=body).data
+
+    # ---------- 列表与历史建议（V02/V03） ----------
 
     def list_tasks(self, actor_id: str, project_id: str,
                    role_filter: str | None = None,
                    status_filter: str | None = None,
+                   category_filter: str | None = None,
                    limit: int = 50) -> dict:
-        """任务列表：服务端按角色自动收紧可见范围；客户端筛选只能缩小。"""
+        """服务端按主体推导可见集合；客户端 role 只能在该主体角色内再缩小。"""
         with self.db.tx() as conn:
             cur = conn.cursor()
-            roles = self._resolve_actor(cur, project_id, actor_id,
-                                        {"REPORTER", "TECHNICIAN", "MANAGER"})
-            effective_role = role_filter
-            if effective_role is None:
-                # 服务端按主体最严角色自动收紧
-                if "REPORTER" in roles:
-                    effective_role = "REPORTER"
-                elif "TECHNICIAN" in roles:
-                    effective_role = "TECHNICIAN"
-                else:
-                    effective_role = "MANAGER"
-            params: list[Any] = [project_id]
-            sql = "SELECT t.task_id, t.status, t.version, t.problem_text, t.reporter_id, t.assignee_id, " \
-                  "t.asset_id, t.updated_at_ms, t.created_at_ms, t.project_id " \
-                  "FROM repair_tasks t WHERE t.project_id=?"
-            if effective_role == "REPORTER":
-                sql += " AND t.reporter_id=?"
-                params.append(actor_id)
-            elif effective_role == "TECHNICIAN":
-                sql += " AND t.assignee_id=?"
-                params.append(actor_id)
-            elif effective_role != "MANAGER":
-                raise PermissionDenied(f"unknown role_filter: {effective_role}")
-            if status_filter:
-                sql += " AND t.status=?"
-                params.append(status_filter)
-            sql += " ORDER BY t.updated_at_ms DESC LIMIT ?"
-            params.append(int(limit))
-            rows = cur.execute(sql, tuple(params)).fetchall()
-            return {"project_id": project_id, "tasks": [dict(r) for r in rows], "count": len(rows)}
+            roles = auth.roles_of(cur, actor_id, project_id)
+            if not roles:
+                raise PermissionDenied(f"actor not in project {project_id}")
+            effective = auth.narrow_role(cur, actor_id, project_id, role_filter)
+            if effective is None:
+                # 服务端按主体最严可见范围推导
+                if "MANAGER" in roles and "TECHNICIAN" not in roles and "REPORTER" not in roles:
+                    effective = "MANAGER"
+                elif "TECHNICIAN" in roles and "REPORTER" not in roles:
+                    effective = "TECHNICIAN"
+                elif "REPORTER" in roles and "TECHNICIAN" not in roles:
+                    effective = "REPORTER"
+                # 多角色：不加过滤，取并集（下面用 task_visible 统一判定）
+            rows = cur.execute(
+                "SELECT * FROM repair_tasks WHERE project_id=?", (project_id,)).fetchall()
+            out = []
+            for r in rows:
+                if not auth.task_visible(cur, actor_id, r):
+                    continue
+                if effective == "REPORTER" and r["reporter_id"] != actor_id:
+                    continue
+                if effective == "TECHNICIAN" and not (
+                        r["assignee_id"] == actor_id
+                        or (r["status"] == "OPEN"
+                            and auth.skill_matches(cur, actor_id, project_id, r["category"]))):
+                    continue
+                if status_filter and r["status"] != status_filter:
+                    continue
+                if category_filter and r["category"] != category_filter:
+                    continue
+                masked = dict(r)
+                if not auth.can_see_contact(cur, actor_id, r):
+                    masked["contact_info"] = None
+                out.append({
+                    "task_id": masked["task_id"], "project_id": masked["project_id"],
+                    "status": masked["status"], "version": masked["version"],
+                    "category": masked["category"], "problem_text": masked["problem_text"],
+                    "reporter_id": masked["reporter_id"], "assignee_id": masked["assignee_id"],
+                    "asset_id": masked["asset_id"], "space_id": masked["space_id"],
+                    "contact_name": masked["contact_name"],
+                    "contact_info": masked["contact_info"],
+                    "preferred_window": masked["preferred_window"],
+                    "created_at_ms": masked["created_at_ms"],
+                    "updated_at_ms": masked["updated_at_ms"],
+                })
+            out.sort(key=lambda x: x["updated_at_ms"], reverse=True)
+            return {"project_id": project_id, "tasks": out[: int(limit)],
+                    "count": min(len(out), int(limit)), "effective_role": effective,
+                    "roles": sorted(roles)}
 
     def get_history_advice(self, actor_id: str, task_id: str,
                            asset_id: str | None = None) -> dict:
-        """N04：历史经验建议；严格按可见性过滤。
-
-        - 仅返回当前任务所属项目 + 当前主体可见范围内的历史任务
-        - asset_id 若提供：必须是当前任务的 asset 或同项目可见设备；否则 404
-        """
         with self.db.tx() as conn:
             cur = conn.cursor()
-            row = cur.execute(
-                "SELECT project_id, asset_id, reporter_id, assignee_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            roles = self._resolve_actor(cur, row["project_id"], actor_id,
-                                        {"REPORTER", "TECHNICIAN", "MANAGER"})
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
+            roles = auth.roles_of(cur, actor_id, task["project_id"])
             is_manager = "MANAGER" in roles
-            target_asset = asset_id or row["asset_id"]
+            can_see_contact = auth.can_see_contact(cur, actor_id, task)
+            target_asset = asset_id or task["asset_id"]
             if target_asset is None:
-                return {"task_id": task_id, "asset_id": None,
-                        "history": [], "events": [], "advice": "未绑定设备，无历史依据"}
-            # 验证设备存在、同项目、未归档
+                return {"task_id": task_id, "asset_id": None, "history": [], "events": [],
+                        "advice": "未绑定设备，无历史依据"}
             asset_row = cur.execute(
-                "SELECT project_id, active FROM repair_assets WHERE asset_id=?",
-                (target_asset,),
-            ).fetchone()
-            if asset_row is None or asset_row["project_id"] != row["project_id"] or not asset_row["active"]:
+                "SELECT project_id, active, asset_code, display_name FROM repair_assets "
+                "WHERE asset_id=?", (target_asset,)).fetchone()
+            if (asset_row is None or asset_row["project_id"] != task["project_id"]
+                    or not asset_row["active"]):
                 raise OctoSenseError("INVALID_PROJECT_REFERENCE",
-                                     "asset not visible to this task",
-                                     http_status=404)
-            # 历史：项目内同设备；非 manager 还须与当前任务有 reporter/assignee 关系
-            params = [target_asset, task_id]
-            history_sql = (
-                "SELECT task_id, project_id, reporter_id, assignee_id, status, problem_text, "
-                "created_at_ms, updated_at_ms FROM repair_tasks "
-                "WHERE asset_id=? AND task_id<>?"
-            )
+                                     "asset not visible to this task", http_status=404)
+            sql = ("SELECT task_id, project_id, reporter_id, assignee_id, status, "
+                   "problem_text, category, created_at_ms, updated_at_ms FROM repair_tasks "
+                   "WHERE project_id=? AND asset_id=? AND task_id<>?")
+            params: list[Any] = [task["project_id"], target_asset, task_id]
             if not is_manager:
-                history_sql += " AND (reporter_id=? OR assignee_id=?)"
+                sql += " AND (reporter_id=? OR assignee_id=?)"
                 params.extend([actor_id, actor_id])
-            history_sql += " ORDER BY updated_at_ms DESC LIMIT 10"
-            history = cur.execute(history_sql, tuple(params)).fetchall()
+            sql += " ORDER BY updated_at_ms DESC LIMIT 10"
+            history = cur.execute(sql, tuple(params)).fetchall()
+            # 历史明细也按当前主体过滤（防止跨项目/无关系任务经 asset_id 泄漏）
+            visible_history = [dict(h) for h in history
+                               if auth.task_visible(cur, actor_id, h) or is_manager]
             events = cur.execute(
-                "SELECT seq, event_type, actor_id, after_state, at_ms "
-                "FROM repair_events WHERE task_id=? ORDER BY seq DESC LIMIT 20",
-                (task_id,),
-            ).fetchall()
+                "SELECT seq, event_type, actor_id, after_state, at_ms FROM repair_events "
+                "WHERE task_id=? ORDER BY seq DESC LIMIT 20", (task_id,)).fetchall()
+            # R3-04：events 嵌套字段也按当前主体授权做脱敏；
+            # 不能因为是 history-advice 端点就把 after_state 原样回写。
+            def _mask_event(snapshot):
+                if snapshot is None or not isinstance(snapshot, dict):
+                    return snapshot
+                if can_see_contact:
+                    return snapshot
+                out = dict(snapshot)
+                if "contact_info" in out:
+                    out["contact_info"] = None
+                return out
+            masked_events = []
+            for e in events:
+                ed = dict(e)
+                try:
+                    after = json.loads(ed["after_state"]) if ed.get("after_state") else None
+                except (TypeError, ValueError):
+                    after = None
+                ed["after_state"] = _mask_event(after)
+                masked_events.append(ed)
             advice = (
-                f"该设备过去有 {len(history)} 次维修记录，最近状态："
-                f"{history[0]['status'] if history else '无'}"
+                f"该设备过去有 {len(visible_history)} 次可见维修记录，最近状态："
+                f"{visible_history[0]['status'] if visible_history else '无'}"
             )
-            return {
-                "task_id": task_id,
-                "asset_id": target_asset,
-                "history": [dict(h) for h in history],
-                "events": [dict(e) for e in events],
-                "advice": advice,
-            }
+            return {"task_id": task_id, "asset_id": target_asset,
+                    "asset_code": asset_row["asset_code"],
+                    "asset_display_name": asset_row["display_name"],
+                    "history": visible_history,
+                    "events": masked_events,
+                    "advice": advice}
 
     def record_advice(self, actor_id: str, idem_key: str, task_id: str,
                       source_kind: str, payload: dict) -> dict:
-        """R-P1-3/N07：记录一条助手/历史建议；不改任务状态；含幂等与权限校验。"""
         if source_kind not in {"DEVICE_HISTORY", "STAGE_HINT", "PROGRESS_NOTE"}:
-            raise OctoSenseError("INVALID_KIND", source_kind, http_status=422)
-        payload_hash = canonical_payload_hash({"task_id": task_id, "source_kind": source_kind,
-                                              "payload": payload})
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            self._resolve_actor(cur, row["project_id"], actor_id,
-                                {"REPORTER", "TECHNICIAN", "MANAGER"})
+            raise InvalidKind(source_kind)
+
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
             advice_id = _uuid()
-            cur.execute(
-                "INSERT INTO repair_advice (advice_id, task_id, actor_id, source_kind, payload, created_at_ms) "
-                "VALUES (?,?,?,?,?,?)",
+            conn.execute(
+                "INSERT INTO repair_advice (advice_id, task_id, actor_id, source_kind, "
+                "payload, created_at_ms) VALUES (?,?,?,?,?,?)",
                 (advice_id, task_id, actor_id, source_kind,
-                 json.dumps(payload, ensure_ascii=False), _now_ms()),
-            )
-            self._record_action(cur, actor_id, idem_key, "record_advice",
-                                row["project_id"], task_id, None, "OK",
-                                payload_hash=payload_hash)
-            return {"advice_id": advice_id, "task_id": task_id, "source_kind": source_kind}
+                 json.dumps(payload, ensure_ascii=False), self.now()))
+            return {"advice_id": advice_id, "task_id": task_id, "source_kind": source_kind,
+                    "task_version": task["version"]}
+
+        return self._run(command="record_advice", actor_id=actor_id, idem_key=idem_key,
+                         task_id=task_id, expected_version=None,
+                         params={"task_id": task_id, "source_kind": source_kind,
+                                 "payload": payload},
+                         body=body).data

@@ -35,3 +35,8 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# backend/tests/octosense_backend/conftest.py 与 tests/conftest.py 同名。
+# 继承的 test_ops_* 用 `from conftest import stream_of`；把 tests/ 放在
+# pythonpath 最前，保证该 import 稳定解析到 tests/conftest.py（含 stream_of），
+# 避免名称碰撞导致两个测试模块收集失败。
+pythonpath = ["tests"]

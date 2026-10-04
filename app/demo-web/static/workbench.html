@@ -16,9 +16,24 @@
           <form id="new-form" class="new-form" onsubmit="return createDraft(event)">
             <div class="field">
               <label>项目</label>
-              <select name="project_id">
+              <select name="project_id" onchange="loadSpaces(this.value)">
                 <option value="prj-A">项目 A · 项目A</option>
                 <option value="prj-B">项目 B · 项目B</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>服务空间（必填，确认前必选）</label>
+              <select name="space_id" required>
+                <option value="">— 加载中 —</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>任务类别</label>
+              <select name="category" required>
+                <option value="HVAC_NOT_COOLING">空调不制冷（HVAC）</option>
+                <option value="WATER_LEAK">水暖渗漏（WATER_LEAK）</option>
+                <option value="ELECTRICAL">电气（ELECTRICAL）</option>
+                <option value="OTHER">其他（OTHER）</option>
               </select>
             </div>
             <div class="field">
@@ -78,6 +93,10 @@
         if (!myProjects.includes(o.value)) o.remove();
       });
       document.querySelector('#new-form [name=idempotency_key]').value = OctoApp.newIdem();
+      // R2-03：进入页面即加载默认项目的服务空间选项
+      if (sel.options.length > 0) {
+        loadSpaces(sel.value);
+      }
     }
 
     // 修复 R-P1-6：从 ACTIVE 任务对象读版本，未选中禁用动作
@@ -242,18 +261,12 @@
 
       // ─── REPORTER ───
       if (role === 'REPORTER' && status === 'DRAFT' && isReporter) {
+        actions.push({ kind: 'fn', label: '补齐草稿（space / 联系人）', data: { fn: 'updateDraftSpace' } });
         actions.push({ kind: 'act', label: '确认报修（→ OPEN）', data: { kind: 'confirm' } });
       }
-      if (role === 'REPORTER' && status === 'ACCEPTED' && isReporter) {
-        actions.push({ kind: 'act', label: '绑定设备 AC-001', data: { kind: 'bind', asset_id: 'as-a-1' } });
-        actions.push({ kind: 'act', label: '绑定设备 PWR-001', data: { kind: 'bind', asset_id: 'as-a-2' } });
-      }
-      // 修复 R-P0-5：proposedAppt 触发确认按钮；confirmedAppt 触发开工按钮
-      if (role === 'REPORTER' && status === 'ACCEPTED' && isReporter && proposedAppt) {
-        actions.push({ kind: 'act', label: '✓ 确认当前提议（→ CONFIRMED）', data: { kind: 'confirm_appt', appointment_id: proposedAppt.appointment_id } });
-        actions.push({ kind: 'fn', label: '拒绝当前提议', data: { fn: 'rejectAppt' } });
-      }
-      if (role === 'REPORTER' && status === 'SCHEDULED' && isReporter && proposedAppt) {
+      // ACCEPTED 阶段报修人按基线不可再绑设备；移走旧 binder。
+      // 提议确认/拒绝始终可用
+      if (role === 'REPORTER' && (status === 'ACCEPTED' || status === 'SCHEDULED') && isReporter && proposedAppt) {
         actions.push({ kind: 'act', label: '✓ 确认当前提议（→ CONFIRMED）', data: { kind: 'confirm_appt', appointment_id: proposedAppt.appointment_id } });
         actions.push({ kind: 'fn', label: '拒绝当前提议', data: { fn: 'rejectAppt' } });
       }
@@ -273,13 +286,15 @@
         actions.push({ kind: 'act', label: '接单（→ ACCEPTED）', data: { kind: 'accept' } });
       }
       if (role === 'TECHNICIAN' && isAssignee && status === 'ACCEPTED') {
+        // 接单技工可以绑设备（assets 服务本任务的 space）
+        actions.push({ kind: 'fn', label: '绑定设备（按服务关系选）', data: { fn: 'bindAssetForTech' } });
         actions.push({ kind: 'fn', label: '提议预约（2h 后开始 1h）', data: { fn: 'proposeAppt' } });
       }
       if (role === 'TECHNICIAN' && isAssignee && status === 'SCHEDULED' && confirmedAppt && t.asset_id) {
         actions.push({ kind: 'act', label: '开工（→ IN_PROGRESS）', data: { kind: 'start' } });
       }
       if (role === 'TECHNICIAN' && isAssignee && status === 'SCHEDULED' && confirmedAppt && !t.asset_id) {
-        actions.push({ kind: 'disabled', label: '需先绑定设备', reason: '当前任务无设备，需 reporter 绑定' });
+        actions.push({ kind: 'disabled', label: '需先绑定设备', reason: '当前任务无设备' });
       }
       if (role === 'TECHNICIAN' && isAssignee && status === 'IN_PROGRESS') {
         actions.push({ kind: 'fn', label: '记录处置', data: { fn: 'recordProgress' } });
@@ -295,9 +310,17 @@
       if (role === 'MANAGER' && status === 'OPEN') {
         actions.push({ kind: 'act', label: '分配给技工甲', data: { kind: 'assign', assignee_id: 'u-tech-1' } });
         actions.push({ kind: 'act', label: '分配给技工乙', data: { kind: 'assign', assignee_id: 'u-tech-2' } });
+        actions.push({ kind: 'fn', label: '绑定设备（OPEN 由经理绑定）', data: { fn: 'bindAssetForMgr' } });
+      }
+      if (role === 'MANAGER' && status === 'ACCEPTED') {
+        actions.push({ kind: 'fn', label: '绑定设备', data: { fn: 'bindAssetForMgr' } });
       }
       if (role === 'MANAGER' && (status === 'SCHEDULED' || status === 'ACCEPTED')) {
         actions.push({ kind: 'fn', label: '改派给另一技工', data: { fn: 'reassign' } });
+      }
+      if (role === 'MANAGER' && status === 'IN_PROGRESS') {
+        actions.push({ kind: 'fn', label: '换绑设备（需理由）', data: { fn: 'bindAssetForMgrInProgress' } });
+        actions.push({ kind: 'fn', label: '解绑设备（需理由）', data: { fn: 'unbindAssetForMgr' } });
       }
       if (role === 'MANAGER' && evidence.length > 0) {
         const last = evidence[evidence.length - 1];
@@ -344,6 +367,10 @@
     async function createDraft(ev) {
       ev.preventDefault();
       const f = ev.target;
+      if (!f.space_id.value) {
+        OctoApp.toast('请先选择服务空间', 'error');
+        return false;
+      }
       const payload = {
         idempotency_key: OctoApp.newIdem(),
         project_id: f.project_id.value,
@@ -351,6 +378,8 @@
         contact_name: f.contact_name.value,
         contact_info: f.contact_info.value,
         preferred_window: f.preferred_window.value,
+        space_id: f.space_id.value,
+        category: f.category.value || 'OTHER',
       };
       try {
         const r = await OctoApp.api('/api/octosense/v1/tasks', { method: 'POST', body: payload });
@@ -362,6 +391,19 @@
       } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
     }
 
+    async function loadSpaces(projectId) {
+      const sel = document.querySelector('#new-form [name=space_id]');
+      if (!sel) return;
+      try {
+        const r = await OctoApp.api('/api/octosense/v1/spaces?project_id=' + encodeURIComponent(projectId));
+        sel.innerHTML = '<option value="">— 请选择服务空间 —</option>' +
+          r.spaces.map(s => `<option value="${OctoApp.escapeHtml(s.space_id)}">${OctoApp.escapeHtml(s.name)} · ${OctoApp.escapeHtml(s.space_id)}</option>`).join('');
+      } catch (e) {
+        sel.innerHTML = '<option value="">— 加载失败 —</option>';
+        OctoApp.toast('加载服务空间失败：' + e.message, 'error');
+      }
+    }
+
     async function act(kind, body) {
       const idem = OctoApp.newIdem();
       const tid = ACTIVE.taskId;
@@ -371,6 +413,7 @@
         case 'accept': path = `/api/octosense/v1/tasks/${tid}/accept`; break;
         case 'assign': path = `/api/octosense/v1/tasks/${tid}/assign`; break;
         case 'bind': path = `/api/octosense/v1/tasks/${tid}/bind-asset`; break;
+        case 'unbind': path = `/api/octosense/v1/tasks/${tid}/unbind-asset`; break;
         case 'start': path = `/api/octosense/v1/tasks/${tid}/start`; break;
         case 'complete': path = `/api/octosense/v1/tasks/${tid}/complete`; break;
         case 'accept_finish': path = `/api/octosense/v1/tasks/${tid}/accept-finish`; break;
@@ -495,6 +538,92 @@
       } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
     }
 
+    async function updateDraftSpace() {
+      // 仅 DRAFT 阶段原报修人可用：补 space_id / contact / problem
+      if (!ACTIVE.task || ACTIVE.task.status !== 'DRAFT') {
+        OctoApp.toast('仅 DRAFT 阶段可补齐', 'error'); return;
+      }
+      const spaceId = prompt('补齐服务空间（input service space_id）:', 'sp-a-1');
+      if (!spaceId) return;
+      const contact = prompt('联系人姓名：', ACTIVE.task.contact_name || '报修人一');
+      if (!contact) return;
+      try {
+        await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/draft`, {
+          method: 'POST',
+          body: { idempotency_key: OctoApp.newIdem(),
+                  expected_version: currentVer(),
+                  space_id: spaceId,
+                  contact_name: contact },
+        });
+        OctoApp.toast('✓ 已补齐');
+        await loadList(); await openTask(ACTIVE.taskId);
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function bindAssetForTech() {
+      // 拉取本项目下可服务的设备，让技工选择（按 /assets/match 不能批量）
+      // 演示夹具里：AC-001 服务会议室，技工选择实际能服务的资产
+      const candidates = await fetchCandidates();
+      if (!candidates.length) {
+        OctoApp.toast('当前任务空间没有可服务的设备', 'error'); return;
+      }
+      const choice = prompt('绑定设备 asset_id（候选：' + candidates.map(c => c.asset_id).join(', ') + '）:', candidates[0].asset_id);
+      if (!choice) return;
+      try {
+        await act('bind', { expected_version: currentVer(), asset_id: choice });
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function bindAssetForMgr() {
+      const candidates = await fetchCandidates();
+      if (!candidates.length) {
+        OctoApp.toast('当前任务空间没有可服务的设备', 'error'); return;
+      }
+      const choice = prompt('绑定设备 asset_id（候选：' + candidates.map(c => c.asset_id).join(', ') + '）:', candidates[0].asset_id);
+      if (!choice) return;
+      try {
+        await act('bind', { expected_version: currentVer(), asset_id: choice });
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function bindAssetForMgrInProgress() {
+      const reason = prompt('换绑设备理由（必填）：', '现场更换为新设备');
+      if (!reason) return;
+      const candidates = await fetchCandidates();
+      if (!candidates.length) {
+        OctoApp.toast('当前任务空间没有可服务的设备', 'error'); return;
+      }
+      const choice = prompt('绑定设备 asset_id（候选：' + candidates.map(c => c.asset_id).join(', ') + '）:', candidates[0].asset_id);
+      if (!choice) return;
+      try {
+        await act('bind', { expected_version: currentVer(), asset_id: choice, reason });
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function unbindAssetForMgr() {
+      const reason = prompt('解绑设备理由（必填）：', '现场不需要设备绑定');
+      if (!reason) return;
+      try {
+        await act('unbind', { expected_version: currentVer(), reason });
+      } catch (e) { OctoApp.toast('失败：' + e.message, 'error'); }
+    }
+
+    async function fetchCandidates() {
+      // 通过 /assets/match 逐个已知设备（演示夹具 3 个）
+      const known = ['as-a-1', 'as-a-2', 'as-a-3'];
+      const projectId = ACTIVE.task.project_id;
+      const out = [];
+      for (const code of known) {
+        try {
+          const data = await OctoApp.api(`/api/octosense/v1/assets/match?project_id=${encodeURIComponent(projectId)}&code=${encodeURIComponent(code)}`);
+          if (data.matches && data.matches.length) {
+            out.push(...data.matches);
+          }
+        } catch (e) { /* 找不到就跳过 */ }
+      }
+      return out;
+    }
+
     // 暴露给内联 onclick
     window.createDraft = createDraft;
     window.openTask = openTask;
@@ -507,6 +636,11 @@
     window.recordProgress = recordProgress;
     window.uploadEvidence = uploadEvidence;
     window.acceptFinish = acceptFinish;
+    window.updateDraftSpace = updateDraftSpace;
+    window.bindAssetForTech = bindAssetForTech;
+    window.bindAssetForMgr = bindAssetForMgr;
+    window.bindAssetForMgrInProgress = bindAssetForMgrInProgress;
+    window.unbindAssetForMgr = unbindAssetForMgr;
     window.logout = OctoApp.clearActor; // alias
 
     loadList();

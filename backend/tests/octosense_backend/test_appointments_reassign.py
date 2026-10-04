@@ -1,161 +1,178 @@
-"""T06 / T12 测试：appointments + reassign。
+"""T06 / T12 收尾：改派与拒绝改约的对象授权与事实保留。
 
-修复后版本：Q04 经理不能代确认；N06 拒绝改约保留 SCHEDULED。
+与 test_appointments.py 的分工：本文件专注“授权拒绝”和“旧事实保留”两条分支，
+不重复 happy path。
 """
 from __future__ import annotations
 
-import time
-
 import pytest
 
-from octosense_backend.appointments import AppointmentCommands
 from octosense_backend.errors import (
+    DraftMissingField,
     IllegalTransition,
     OctoSenseError,
     PermissionDenied,
-    VersionConflict,
 )
 
+from world import (
+    AS_AC, HVAC, MGR, PA, PB, R1, R2, T1, T2, World, ok, okd, task_row,
+)
 
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-@pytest.fixture
-def appt_cmds(db) -> AppointmentCommands:
-    return AppointmentCommands(db)
+DAY = 24 * 3600 * 1000
 
 
-def _setup_accepted_task(executor, fixtures):
-    p = fixtures["project_a"]
-    r = fixtures["reporter_1"]
-    t = fixtures["tech_1"]
-    res = executor.create_draft(actor_id=r, idem_key="c", problem_text="P",
-                                contact_name="C", project_id=p)
-    tid = res.data["task_id"]
-    executor.confirm_draft(actor_id=r, idem_key="o", task_id=tid, expected_version=1)
-    executor.accept_task(actor_id=t, idem_key="a", task_id=tid, expected_version=2)
-    return p, r, t, tid
+def _add_hvac_tech(db, uid="u-tech-7", project=PA):
+    conn = db.conn()
+    conn.execute("INSERT OR IGNORE INTO repair_users (user_id, display_name, is_demo) "
+                 "VALUES (?,?,1)", (uid, f"技工 {uid}（HVAC）"))
+    conn.execute("INSERT OR IGNORE INTO repair_roles (project_id, user_id, role, skills) "
+                 "VALUES (?,?, 'TECHNICIAN', 'HVAC')", (project, uid))
+    conn.close()
+    return uid
 
 
-def test_confirm_rejects_unknown_actor(executor, appt_cmds, fixtures):
-    p, r, t, tid = _setup_accepted_task(executor, fixtures)
-    start = _now_ms() + 5 * 60_000
-    end = start + 30 * 60_000
-    res = executor.propose_appointment(actor_id=t, idem_key="p1", task_id=tid,
-                                       start_at_ms=start, end_at_ms=end, expected_version=3)
-    assert res.ok
+def test_confirm_rejects_unknown_actor(executor, appt_cmds, db, clock, ext):
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
+    appt = w.propose(tid=tid)
+    with pytest.raises(OctoSenseError):
+        appt_cmds.confirm_appointment(actor_id="u-ghost", idem_key="k-ghost", task_id=tid,
+                                      expected_version=task_row(db, tid)["version"],
+                                      appointment_id=appt["appointment_id"])
+    assert task_row(db, tid)["status"] == "ACCEPTED"
+
+
+def test_confirm_only_reporter_no_manager_substitute(executor, appt_cmds, db, clock, ext):
+    """Q04：P0 经理不代确认预约。"""
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
+    appt = w.propose(tid=tid)
     with pytest.raises(PermissionDenied):
-        appt_cmds.confirm_appointment(actor_id="u-no-such-user", idem_key="x",
-                                      task_id=tid, expected_version=4)
+        appt_cmds.confirm_appointment(actor_id=MGR, idem_key="k-mgr", task_id=tid,
+                                      expected_version=task_row(db, tid)["version"],
+                                      appointment_id=appt["appointment_id"])
+    assert task_row(db, tid)["status"] == "ACCEPTED"
 
 
-def test_confirm_only_reporter_no_manager_substitute(executor, appt_cmds, fixtures):
-    """Q04：经理不能代确认预约。"""
-    p, r, t, tid = _setup_accepted_task(executor, fixtures)
-    start = _now_ms() + 5 * 60_000
-    end = start + 30 * 60_000
-    res = executor.propose_appointment(actor_id=t, idem_key="p1", task_id=tid,
-                                       start_at_ms=start, end_at_ms=end, expected_version=3)
-    appt_id = res.data["appointment_id"]
+def test_reject_appointment_keeps_old_confirmed(executor, appt_cmds, db, clock, ext):
+    """N06：有旧 CONFIRMED 时拒绝新提议，任务保持 SCHEDULED，旧预约仍可开工。"""
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
+    appt = w.propose(tid=tid)
+    w.confirm(tid=tid, appointment_id=appt["appointment_id"])
+    start = appt["start_at_ms"]
+    moved = w.propose(tid=tid, start=start + DAY, key="k-move")
+    data = w.reject_proposal(tid=tid, reason="改到第二天不方便", key="k-rej")
+    assert data["kept_confirmed"] is True
+    assert task_row(db, tid)["status"] == "SCHEDULED"
+    conn = db.conn()
+    by_id = {r["appointment_id"]: r["status"] for r in conn.execute(
+        "SELECT appointment_id, status FROM repair_appointments WHERE task_id=?",
+        (tid,)).fetchall()}
+    conn.close()
+    assert by_id[appt["appointment_id"]] == "CONFIRMED"
+    assert by_id[moved["appointment_id"]] == "SUPERSEDED"
+    clock.set(start + 60000)
+    w.start(tid=tid, at=start + 60000)
+    assert task_row(db, tid)["status"] == "IN_PROGRESS"
+
+
+def test_reject_appointment_when_no_proposed_rejected(executor, appt_cmds, db, clock, ext):
+    """Q05：无 PROPOSED 不得 reject；不得产生虚假成功回执。"""
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
+    with pytest.raises(IllegalTransition):
+        appt_cmds.reject_appointment(actor_id=R1, idem_key="k-no-proposed", task_id=tid,
+                                     expected_version=task_row(db, tid)["version"],
+                                     reason="不要了")
+    assert task_row(db, tid)["status"] == "ACCEPTED"
+    conn = db.conn()
+    n = conn.execute("SELECT COUNT(*) AS n FROM repair_actions WHERE idempotency_key=?",
+                     ("k-no-proposed",)).fetchone()["n"]
+    conn.close()
+    assert n == 0, "失败的拒绝不得留下 OK 回执"
+
+
+def test_reassign_scheduled_releases_appointment(executor, appt_cmds, db, clock, ext):
+    """T06：改派 SCHEDULED 任务：旧确认 SUPERSEDED、任务回 ACCEPTED、旧技工失效。"""
+    new_tech = _add_hvac_tech(db)
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
+    appt = w.propose(tid=tid)
+    w.confirm(tid=tid, appointment_id=appt["appointment_id"])
+    v = task_row(db, tid)["version"]
+    data = okd(appt_cmds.reassign(actor_id=MGR, idem_key="k-reassign", task_id=tid,
+                                  new_assignee_id=new_tech, expected_version=v,
+                                  reason="技工甲请假"), "reassign")
+    assert data["assignee_id"] == new_tech
+    assert data["released_appointments"] >= 1
+    row = task_row(db, tid)
+    assert row["status"] == "ACCEPTED" and row["assignee_id"] == new_tech
+    conn = db.conn()
+    ap = conn.execute("SELECT status FROM repair_appointments WHERE appointment_id=?",
+                      (appt["appointment_id"],)).fetchone()
+    jobs = conn.execute(
+        "SELECT COUNT(*) AS n FROM repair_jobs WHERE task_id=? AND status='PENDING'",
+        (tid,)).fetchone()["n"]
+    ev = conn.execute("SELECT actor_id, after_state FROM repair_events WHERE task_id=? "
+                      "AND event_type='reassign'", (tid,)).fetchone()
+    conn.close()
+    assert ap["status"] == "SUPERSEDED"
+    assert jobs == 0, "改派必须取消原技工的到期提醒作业"
+    assert ev["actor_id"] == MGR
+    clock.set(appt["start_at_ms"] + 1000)
+    with pytest.raises(OctoSenseError):
+        w.executor.start_progress(actor_id=T1, idem_key="k-old-start", task_id=tid,
+                                  expected_version=task_row(db, tid)["version"])
+
+
+def test_reassign_requires_reason(executor, appt_cmds, db, clock, ext):
+    _add_hvac_tech(db, uid="u-tech-8")
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
+    with pytest.raises(DraftMissingField):
+        appt_cmds.reassign(actor_id=MGR, idem_key="k-r0", task_id=tid,
+                           new_assignee_id="u-tech-8",
+                           expected_version=task_row(db, tid)["version"], reason="")
+
+
+def test_reassign_in_progress_rejected(executor, appt_cmds, db, clock, ext):
+    w = World(executor, ext, None, db, clock)
+    tid, _, _ = w.in_progress()
+    with pytest.raises(IllegalTransition):
+        appt_cmds.reassign(actor_id=MGR, idem_key="k-ri", task_id=tid,
+                           new_assignee_id=T1,
+                           expected_version=task_row(db, tid)["version"], reason="换人")
+    row = task_row(db, tid)
+    assert row["status"] == "IN_PROGRESS" and row["assignee_id"] == T1
+
+
+def test_reassign_target_must_be_skill_matched(executor, appt_cmds, db, clock, ext):
+    """V09：改派对象必须是同项目、技能匹配的有效技工。"""
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
     with pytest.raises(PermissionDenied):
-        appt_cmds.confirm_appointment(actor_id=fixtures["manager"], idem_key="mgr-conf",
-                                      task_id=tid, expected_version=4,
-                                      appointment_id=appt_id)
+        appt_cmds.reassign(actor_id=MGR, idem_key="k-rs", task_id=tid,
+                           new_assignee_id=T2,   # 电气，不能承接 HVAC
+                           expected_version=task_row(db, tid)["version"],
+                           reason="派给电工")
+    assert task_row(db, tid)["assignee_id"] == T1
 
 
-def test_reject_appointment_keeps_old_confirmed(executor, appt_cmds, fixtures):
-    """T12 / N06：拒绝 PROPOSED 保留旧 CONFIRMED → task 保持 SCHEDULED。"""
-    p, r, t, tid = _setup_accepted_task(executor, fixtures)
-    start = _now_ms() + 5 * 60_000
-    end = start + 30 * 60_000
-    res = executor.propose_appointment(actor_id=t, idem_key="p1", task_id=tid,
-                                       start_at_ms=start, end_at_ms=end, expected_version=3)
-    appt_id_1 = res.data["appointment_id"]
-    res = appt_cmds.confirm_appointment(actor_id=r, idem_key="conf1",
-                                        task_id=tid, expected_version=4,
-                                        appointment_id=appt_id_1)
-    assert res["task_status"] == "SCHEDULED"
-    # 走 ext 绑定
-    from octosense_backend.extended import ExtendedCommands
-    ext = ExtendedCommands(executor.db)
-    ext.bind_asset(actor_id=r, idem_key="b", task_id=tid,
-                   asset_id=fixtures["asset_a1"], expected_version=5)
-    # 再提议（不同时间） — 在 SCHEDULED 仍可提议
-    start2 = end + 60 * 60 * 1000
-    end2 = start2 + 60 * 60 * 1000
-    res = executor.propose_appointment(actor_id=t, idem_key="p2", task_id=tid,
-                                       start_at_ms=start2, end_at_ms=end2, expected_version=6)
-    assert res.ok
-    # 拒绝新提议；保留旧 CONFIRMED，task 保持 SCHEDULED
-    res = appt_cmds.reject_appointment(actor_id=r, idem_key="rj1",
-                                       task_id=tid, expected_version=7, reason="时间不行")
-    assert res["status"] == "SCHEDULED"
-    # 第一个预约仍 CONFIRMED
-    conn = executor.db.conn()
-    row = conn.execute(
-        "SELECT status FROM repair_appointments WHERE appointment_id=?",
-        (appt_id_1,),
-    ).fetchone()
-    assert row["status"] == "CONFIRMED"
-
-
-def test_reject_appointment_when_no_proposed_rejected(executor, appt_cmds, fixtures):
-    """Q05：不存在 PROPOSED 时拒绝命令。"""
-    p, r, t, tid = _setup_accepted_task(executor, fixtures)
-    # 当前无 PROPOSED，直接 reject 应失败
-    with pytest.raises(IllegalTransition):
-        appt_cmds.reject_appointment(actor_id=r, idem_key="rj0",
-                                      task_id=tid, expected_version=3, reason="x")
-
-
-def test_reassign_scheduled_releases_appointment(executor, appt_cmds, fixtures):
-    """T06：经理改派 SCHEDULED 任务，旧预约 SUPERSEDED，任务回 ACCEPTED。"""
-    p, r, t1, tid = _setup_accepted_task(executor, fixtures)
-    start = _now_ms() + 5 * 60_000
-    end = start + 30 * 60_000
-    res = executor.propose_appointment(actor_id=t1, idem_key="p1", task_id=tid,
-                                       start_at_ms=start, end_at_ms=end, expected_version=3)
-    appt_id = res.data["appointment_id"]
-    res = appt_cmds.confirm_appointment(actor_id=r, idem_key="conf1",
-                                        task_id=tid, expected_version=4,
-                                        appointment_id=appt_id)
-    assert res["task_status"] == "SCHEDULED"
-    mgr = fixtures["manager"]
-    t2 = fixtures["tech_2"]
-    res = appt_cmds.reassign(actor_id=mgr, idem_key="reassign-1",
-                              task_id=tid, new_assignee_id=t2,
-                              expected_version=5, reason="原技工忙")
-    assert res["status"] == "ACCEPTED"
-    assert res["assignee_id"] == t2
-    conn = executor.db.conn()
-    row = conn.execute(
-        "SELECT status FROM repair_appointments WHERE appointment_id=?",
-        (appt_id,),
-    ).fetchone()
-    assert row["status"] == "SUPERSEDED"
-
-
-def test_reassign_in_progress_rejected(executor, appt_cmds, fixtures, clock):
-    """IN_PROGRESS 任务禁止改派。"""
-    p, r, t, tid = _setup_accepted_task(executor, fixtures)
-    from octosense_backend.extended import ExtendedCommands
-    ext = ExtendedCommands(executor.db)
-    ext.bind_asset(actor_id=r, idem_key="b", task_id=tid,
-                   asset_id=fixtures["asset_a1"], expected_version=3)
-    start = _now_ms() + 5 * 60_000
-    end = start + 30 * 60_000
-    res = executor.propose_appointment(actor_id=t, idem_key="p1", task_id=tid,
-                                       start_at_ms=start, end_at_ms=end, expected_version=4)
-    appt_id = res.data["appointment_id"]
-    appt_cmds.confirm_appointment(actor_id=r, idem_key="conf1",
-                                   task_id=tid, expected_version=5,
-                                   appointment_id=appt_id)
-    executor._clock = lambda: (start + end) // 2
-    executor.start_progress(actor_id=t, idem_key="st1", task_id=tid, expected_version=6)
-    mgr = fixtures["manager"]
-    t2 = fixtures["tech_2"]
-    with pytest.raises(IllegalTransition):
-        appt_cmds.reassign(actor_id=mgr, idem_key="reassign-2",
-                            task_id=tid, new_assignee_id=t2,
-                            expected_version=7, reason="已开工")
+def test_reassign_replay_returns_original(executor, appt_cmds, db, clock, ext):
+    """V05：改派的幂等回放必须给完整原结果。"""
+    new_tech = _add_hvac_tech(db, uid="u-tech-6")
+    w = World(executor, ext, None, db, clock)
+    tid = w.accepted()
+    v = task_row(db, tid)["version"]
+    first = okd(appt_cmds.reassign(actor_id=MGR, idem_key="k-ra", task_id=tid,
+                                   new_assignee_id=new_tech, expected_version=v,
+                                   reason="技工甲请假"), "reassign")
+    second = okd(appt_cmds.reassign(actor_id=MGR, idem_key="k-ra", task_id=tid,
+                                    new_assignee_id=new_tech, expected_version=v,
+                                    reason="技工甲请假"), "reassign replay")
+    assert second["idempotent_replay"] is True
+    assert second["action_id"] == first["action_id"]
+    assert second["result"] == first
+    row = task_row(db, tid)
+    assert row["version"] == v + 1, "replay 不得再 bump 版本"

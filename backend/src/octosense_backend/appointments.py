@@ -1,23 +1,28 @@
 """附加命令：confirm_appointment / reject_appointment / reassign。
 
-修复：
-  - Q02：confirm_appointment 是 ACCEPTED→SCHEDULED 的唯一路径；propose 仅生成 PROPOSED 预约
-  - Q04：confirm_appointment 仅原报修人；Manager P0 不代确认
-  - Q05：reject_appointment 仅当存在 PROPOSED 时才允许
-  - N06：reject_appointment 若存在旧 CONFIRMED 保持 SCHEDULED；无 CONFIRMED 才退回 ACCEPTED
-  - N07：统一 payload_hash 幂等
-  - 持久化 reason 到 events / action
+修复 V06：
+  - 确认时只排除**同一任务**即将被替换的旧 CONFIRMED 预约；本任务的旧预约不再
+    参与冲突检查，其他任务（含同技工跨项目）的重叠仍会被拒。
+  - 提议有有效期 `min(24h, 开始时间 - 现在)`；过期确认返回 410
+    （APPOINTMENT_EXPIRED），不使用客户端时间。
+  - 改派在事务内释放旧技工的 PROPOSED/CONFIRMED 预约并取消到期提醒作业。
+
+所有写操作走 `CommandExecutor` 的统一幂等边界（命令级指纹 + 原结果回放）。
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
-import time
-import uuid
+from typing import Any, Callable
 
+from octosense_backend import authorization as auth
+from octosense_backend import idempotency as idem
+from octosense_backend.commands import CommandExecutor
 from octosense_backend.db import Database
+from octosense_backend.jobs import schedule_appointment_reminders
 from octosense_backend.errors import (
+    AppointmentExpired,
+    DraftMissingField,
     IllegalTransition,
     OctoSenseError,
     PermissionDenied,
@@ -26,303 +31,202 @@ from octosense_backend.errors import (
 )
 
 
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def _uuid() -> str:
-    return uuid.uuid4().hex
-
-
-def canonical_payload_hash(payload: dict) -> str:
-    canon = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
-
-
 class AppointmentCommands:
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, executor: CommandExecutor | None = None,
+                 clock: Callable[[], int] | None = None):
         self.db = db
+        self.executor = executor or CommandExecutor(db, clock=clock)
+        if clock is not None:
+            self.executor._clock = clock
 
-    def _record_action(self, cur, actor_id: str, idem_key: str, command: str,
-                        project_id: str, task_id: str, expected_version: int | None,
-                        result: str, payload_hash: str | None = None,
-                        error_code: str | None = None, error_detail: str | None = None) -> str:
-        action_id = _uuid()
-        cur.execute(
-            "INSERT INTO repair_actions (action_id, idempotency_key, actor_id, project_id, command, "
-            "task_id, expected_version, result, error_code, error_detail, payload_hash, created_at_ms) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (action_id, idem_key, actor_id, project_id, command, task_id, expected_version,
-             result, error_code, error_detail, payload_hash, _now_ms()),
-        )
-        return action_id
+    # ---- 复用 CommandExecutor 的执行边界 ----
 
-    def _check_idempotency(self, cur, actor_id: str, idem_key: str, payload_hash: str) -> dict | None:
-        row = cur.execute(
-            "SELECT result, error_code, error_detail, command, task_id, action_id, payload_hash "
-            "FROM repair_actions WHERE actor_id=? AND idempotency_key=?",
-            (actor_id, idem_key),
-        ).fetchone()
+    def _run(self, *, command: str, actor_id: str, idem_key: str, task_id: str,
+             expected_version: int, params: dict, body: Callable[[Any, str | None], dict]):
+        return self.executor._run(command=command, actor_id=actor_id, idem_key=idem_key,
+                                  task_id=task_id, expected_version=expected_version,
+                                  params=params, body=body)
+
+    def _resolve(self, conn, task_id: str) -> dict:
+        row = conn.execute("SELECT * FROM repair_tasks WHERE task_id=?", (task_id,)).fetchone()
         if row is None:
-            return None
-        if row["result"] != "OK":
-            raise IdempotencyConflict(
-                f"previous action failed: {row['error_code']}: {row['error_detail']}"
-            )
-        if row["payload_hash"] is not None and row["payload_hash"] != payload_hash:
-            raise IdempotencyConflict("idempotency_key reused with different payload")
-        return {
-            "idempotent_replay": True,
-            "task_id": row["task_id"],
-            "command": row["command"],
-            "action_id": row["action_id"],
-        }
+            raise TaskNotFound(task_id)
+        return dict(row)
 
-    def confirm_appointment(
-        self, actor_id: str, idem_key: str, task_id: str,
-        expected_version: int, appointment_id: str | None = None,
-    ) -> dict:
-        """原报修人确认当前 PROPOSED 预约为 CONFIRMED。
-        旧 CONFIRMED 置 SUPERSEDED；task.version +=1；状态由 ACCEPTED→SCHEDULED。
-        """
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "expected_version": expected_version,
-            "appointment_id": appointment_id or "",
-        })
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, status, version, reporter_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            # Q04：仅原报修人（不允许 Manager 代确认）
-            if actor_id != row["reporter_id"]:
+    # ---- confirm ----
+
+    def confirm_appointment(self, actor_id: str, idem_key: str, task_id: str,
+                            expected_version: int, appointment_id: str | None = None) -> dict:
+        """原报修人确认当前 PROPOSED 预约为 CONFIRMED；任务 ACCEPTED→SCHEDULED。"""
+
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            # 服务端对象授权：只有能看见该任务、且是原报修人的主体可以确认
+            self.executor._assert_visible(conn, task, actor_id)
+            if actor_id != task["reporter_id"]:
                 raise PermissionDenied("only original reporter can confirm appointment")
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            if row["status"] not in {"ACCEPTED", "SCHEDULED"}:
+            if task["status"] not in {"ACCEPTED", "SCHEDULED"}:
                 raise IllegalTransition(
-                    f"cannot confirm appointment from task status {row['status']}"
-                )
+                    f"cannot confirm appointment from task status {task['status']}")
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
             if appointment_id:
-                appt = cur.execute(
+                appt = conn.execute(
                     "SELECT * FROM repair_appointments WHERE appointment_id=? AND task_id=?",
-                    (appointment_id, task_id),
-                ).fetchone()
+                    (appointment_id, task_id)).fetchone()
             else:
-                appt = cur.execute(
-                    "SELECT * FROM repair_appointments WHERE task_id=? AND status='PROPOSED'",
-                    (task_id,),
-                ).fetchone()
-            if appt is None or appt["status"] != "PROPOSED":
+                appt = conn.execute(
+                    "SELECT * FROM repair_appointments WHERE task_id=? AND status='PROPOSED' "
+                    "ORDER BY created_at_ms DESC LIMIT 1", (task_id,)).fetchone()
+            if appt is None:
                 raise IllegalTransition("no PROPOSED appointment to confirm")
+            if appt["status"] != "PROPOSED":
+                raise IllegalTransition(
+                    f"appointment {appt['appointment_id']} is {appt['status']}, not PROPOSED")
             tech_id = appt["technician_id"]
             start, end = appt["start_at_ms"], appt["end_at_ms"]
-            # 冲突检查：排除当前将被替换的预约
-            overlap = cur.execute(
-                "SELECT appointment_id FROM repair_appointments WHERE technician_id=? AND status='CONFIRMED' "
-                "AND appointment_id<>? AND start_at_ms < ? AND end_at_ms > ?",
-                (tech_id, appt["appointment_id"], end, start),
-            ).fetchone()
+            now = self.executor.now()
+            # 提议有效期：min(提出后 24h, 预约开始时间)
+            validity = min(self.executor.appt_defaults["proposal_validity_ms"],
+                           max(0, start - appt["created_at_ms"]))
+            valid_until = appt["created_at_ms"] + validity
+            if now > valid_until:
+                raise AppointmentExpired(
+                    f"proposal {appt['appointment_id']} expired at {valid_until}; "
+                    "ask the technician to propose a new slot")
+            if now >= end:
+                raise AppointmentExpired(
+                    f"proposal window already ended at {end}")
+            # 冲突检查：只排除本任务即将被替换的旧确认预约
+            overlap = conn.execute(
+                "SELECT appointment_id FROM repair_appointments "
+                "WHERE technician_id=? AND status='CONFIRMED' AND task_id<>? "
+                "AND start_at_ms < ? AND end_at_ms > ?",
+                (tech_id, task_id, end, start)).fetchone()
             if overlap:
                 raise OctoSenseError(
-                    "CONCURRENT_CONFLICT", f"tech {tech_id} overlap {overlap['appointment_id']}",
-                    http_status=409,
-                )
-            # 旧 CONFIRMED 置 SUPERSEDED
-            cur.execute(
+                    "CONCURRENT_CONFLICT",
+                    f"technician {tech_id} has a conflicting confirmed appointment "
+                    f"in another task {overlap['appointment_id']}", http_status=409)
+            conn.execute(
                 "UPDATE repair_appointments SET status='SUPERSEDED', updated_at_ms=? "
-                "WHERE task_id=? AND status='CONFIRMED'",
-                (_now_ms(), task_id),
-            )
-            # 新 PROPOSED 改 CONFIRMED
-            cur.execute(
-                "UPDATE repair_appointments SET status='CONFIRMED', confirmed_by=?, updated_at_ms=? "
-                "WHERE appointment_id=?",
-                (actor_id, _now_ms(), appt["appointment_id"]),
-            )
-            # task 状态：仅原 ACCEPTED 才升 SCHEDULED
-            if row["status"] == "ACCEPTED":
-                cur.execute(
-                    "UPDATE repair_tasks SET status='SCHEDULED', version=version+1, updated_at_ms=? "
-                    "WHERE task_id=?",
-                    (_now_ms(), task_id),
-                )
-            else:
-                cur.execute(
-                    "UPDATE repair_tasks SET version=version+1, updated_at_ms=? WHERE task_id=?",
-                    (_now_ms(), task_id),
-                )
-            new_ver = row["version"] + 1
-            self._record_action(cur, actor_id, idem_key, "confirm_appointment",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash)
-            cur.execute(
-                "INSERT INTO repair_events (task_id, task_version, event_type, actor_id, after_state, at_ms) "
-                "VALUES (?,?,?,?,?,?)",
-                (task_id, new_ver, "confirm_appointment", actor_id,
-                 json.dumps({
-                     "appointment_id": appt["appointment_id"], "status": "CONFIRMED",
-                     "task_status": "SCHEDULED" if row["status"] == "ACCEPTED" else row["status"],
-                 }, ensure_ascii=False),
-                 _now_ms()),
-            )
-            return {
-                "task_id": task_id, "appointment_id": appt["appointment_id"],
-                "status": "CONFIRMED", "task_version": new_ver,
-                "task_status": "SCHEDULED" if row["status"] == "ACCEPTED" else row["status"],
-            }
+                "WHERE task_id=? AND status='CONFIRMED'", (now, task_id))
+            conn.execute(
+                "UPDATE repair_appointments SET status='CONFIRMED', confirmed_by=?, "
+                "updated_at_ms=? WHERE appointment_id=?",
+                (actor_id, now, appt["appointment_id"]))
+            target_status = "SCHEDULED" if task["status"] == "ACCEPTED" else task["status"]
+            self.executor._transition(
+                conn, task_id, expected_version, target_status, actor_id,
+                "confirm_appointment",
+                extra_after={"appointment_id": appt["appointment_id"],
+                             "appointment_status": "CONFIRMED",
+                             "start_at_ms": start, "end_at_ms": end,
+                             "technician_id": tech_id, "confirmed_by": actor_id})
+            schedule_appointment_reminders(
+                self.db, task_id, appt["appointment_id"], tech_id, actor_id, start, end,
+                clock=lambda: self.executor.now())
+            return {"task_id": task_id, "appointment_id": appt["appointment_id"],
+                    "status": "CONFIRMED", "task_status": target_status,
+                    "task_version": task["version"] + 1,
+                    "start_at_ms": start, "end_at_ms": end, "technician_id": tech_id,
+                    "confirmed_by": actor_id}
 
-    def reject_appointment(
-        self, actor_id: str, idem_key: str, task_id: str,
-        expected_version: int, reason: str,
-    ) -> dict:
-        """原报修人拒绝当前 PROPOSED 预约。
-        - 有旧 CONFIRMED：保持 SCHEDULED
-        - 无旧 CONFIRMED：保持 ACCEPTED
-        - 不存在 PROPOSED：拒绝
-        """
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        if not reason.strip():
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "reject reason required", http_status=422)
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "expected_version": expected_version, "reason": reason,
-        })
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, status, version, reporter_id FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            if actor_id != row["reporter_id"]:
+        res = self._run(command="confirm_appointment", actor_id=actor_id, idem_key=idem_key,
+                        task_id=task_id, expected_version=expected_version,
+                        params={"task_id": task_id, "expected_version": expected_version,
+                                "appointment_id": appointment_id or ""},
+                        body=body)
+        return res.data
+
+    # ---- reject ----
+
+    def reject_appointment(self, actor_id: str, idem_key: str, task_id: str,
+                           expected_version: int, reason: str) -> dict:
+        """原报修人拒绝当前 PROPOSED；有旧 CONFIRMED 保持 SCHEDULED，否则回 ACCEPTED。"""
+        if not reason or not reason.strip():
+            raise DraftMissingField("reject reason required")
+
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            self.executor._assert_visible(conn, task, actor_id)
+            if actor_id != task["reporter_id"]:
                 raise PermissionDenied("only original reporter can reject appointment")
-            if row["status"] not in {"ACCEPTED", "SCHEDULED"}:
+            if task["status"] not in {"ACCEPTED", "SCHEDULED"}:
                 raise IllegalTransition(
-                    f"cannot reject appointment from task status {row['status']}"
-                )
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            # Q05：必须存在 PROPOSED 才能拒绝
-            proposed = cur.execute(
-                "SELECT appointment_id FROM repair_appointments WHERE task_id=? AND status='PROPOSED'",
-                (task_id,),
-            ).fetchall()
+                    f"cannot reject appointment from task status {task['status']}")
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
+            proposed = conn.execute(
+                "SELECT appointment_id FROM repair_appointments "
+                "WHERE task_id=? AND status='PROPOSED'", (task_id,)).fetchall()
             if not proposed:
                 raise IllegalTransition("no PROPOSED appointment to reject")
-            cur.execute(
+            conn.execute(
                 "UPDATE repair_appointments SET status='SUPERSEDED', updated_at_ms=? "
-                "WHERE task_id=? AND status='PROPOSED'",
-                (_now_ms(), task_id),
-            )
-            # N06：保留旧 CONFIRMED；只有无旧 CONFIRMED 才退回 ACCEPTED
-            old_confirmed = cur.execute(
-                "SELECT 1 FROM repair_appointments WHERE task_id=? AND status='CONFIRMED' LIMIT 1",
-                (task_id,),
-            ).fetchone()
+                "WHERE task_id=? AND status='PROPOSED'", (self.executor.now(), task_id))
+            old_confirmed = conn.execute(
+                "SELECT 1 FROM repair_appointments WHERE task_id=? AND status='CONFIRMED' "
+                "LIMIT 1", (task_id,)).fetchone()
             target_status = "SCHEDULED" if old_confirmed else "ACCEPTED"
-            if row["status"] != target_status:
-                cur.execute(
-                    "UPDATE repair_tasks SET status=?, version=version+1, updated_at_ms=? WHERE task_id=?",
-                    (target_status, _now_ms(), task_id),
-                )
-            else:
-                cur.execute(
-                    "UPDATE repair_tasks SET version=version+1, updated_at_ms=? WHERE task_id=?",
-                    (_now_ms(), task_id),
-                )
-            new_ver = row["version"] + 1
-            self._record_action(cur, actor_id, idem_key, "reject_appointment",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash, error_detail=reason)
-            cur.execute(
-                "INSERT INTO repair_events (task_id, task_version, event_type, actor_id, after_state, at_ms) "
-                "VALUES (?,?,?,?,?,?)",
-                (task_id, new_ver, "reject_appointment", actor_id,
-                 json.dumps({"status": target_status, "reason": reason}, ensure_ascii=False),
-                 _now_ms()),
-            )
-            return {"task_id": task_id, "status": target_status, "version": new_ver, "reason": reason}
+            self.executor._transition(
+                conn, task_id, expected_version, target_status, actor_id, "reject_appointment",
+                extra_after={"reason": reason, "kept_confirmed": bool(old_confirmed)})
+            return {"task_id": task_id, "status": target_status,
+                    "task_version": task["version"] + 1, "reason": reason,
+                    "kept_confirmed": bool(old_confirmed)}
 
-    def reassign(
-        self, actor_id: str, idem_key: str, task_id: str,
-        new_assignee_id: str, expected_version: int, reason: str,
-    ) -> dict:
-        """经理改派 ACCEPTED/SCHEDULED 任务；释放旧预约、任务回 ACCEPTED。"""
-        if not isinstance(expected_version, int) or expected_version < 1:
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "expected_version must be positive integer",
-                                 http_status=422)
-        if not reason.strip():
-            raise OctoSenseError("DRAFT_MISSING_FIELD", "reassign reason required", http_status=422)
-        payload_hash = canonical_payload_hash({
-            "task_id": task_id, "expected_version": expected_version,
-            "new_assignee_id": new_assignee_id, "reason": reason,
-        })
-        with self.db.tx() as conn:
-            cur = conn.cursor()
-            replay = self._check_idempotency(cur, actor_id, idem_key, payload_hash)
-            if replay:
-                return replay
-            row = cur.execute(
-                "SELECT project_id, status, version FROM repair_tasks WHERE task_id=?",
-                (task_id,),
-            ).fetchone()
-            if row is None:
-                raise TaskNotFound(task_id)
-            if row["status"] not in {"ACCEPTED", "SCHEDULED"}:
-                raise IllegalTransition(f"cannot reassign from {row['status']}")
-            roles = cur.execute(
-                "SELECT role FROM repair_roles WHERE user_id=? AND project_id=?",
-                (actor_id, row["project_id"]),
-            ).fetchall()
-            if not any(r["role"] == "MANAGER" for r in roles):
+        res = self._run(command="reject_appointment", actor_id=actor_id, idem_key=idem_key,
+                        task_id=task_id, expected_version=expected_version,
+                        params={"task_id": task_id, "expected_version": expected_version,
+                                "reason": reason},
+                        body=body)
+        return res.data
+
+    # ---- reassign ----
+
+    def reassign(self, actor_id: str, idem_key: str, task_id: str,
+                 new_assignee_id: str, expected_version: int, reason: str) -> dict:
+        """经理改派 ACCEPTED/SCHEDULED 未开工任务；释放旧预约并取消提醒作业。"""
+        if not reason or not reason.strip():
+            raise DraftMissingField("reassign reason required")
+        if not new_assignee_id:
+            raise DraftMissingField("new_assignee_id required")
+
+        def body(conn, fp):
+            task = self._resolve(conn, task_id)
+            if task["status"] not in {"ACCEPTED", "SCHEDULED"}:
+                raise IllegalTransition(f"cannot reassign from {task['status']}")
+            roles = auth.roles_of(conn, actor_id, task["project_id"])
+            if "MANAGER" not in roles:
                 raise PermissionDenied("only project manager can reassign")
-            if expected_version != row["version"]:
-                raise VersionConflict(f"task version {row['version']} != expected {expected_version}")
-            target_roles = cur.execute(
-                "SELECT role FROM repair_roles WHERE user_id=? AND project_id=? AND role='TECHNICIAN'",
-                (new_assignee_id, row["project_id"]),
-            ).fetchall()
-            if not target_roles:
-                raise PermissionDenied(f"{new_assignee_id} is not a TECHNICIAN in this project")
-            cur.execute(
+            if expected_version != task["version"]:
+                raise VersionConflict(
+                    f"task version {task['version']} != expected {expected_version}")
+            if not auth.technician_ok(conn, new_assignee_id, task["project_id"],
+                                      task["category"]):
+                raise PermissionDenied(
+                    f"{new_assignee_id} is not a skill-matched TECHNICIAN in this project")
+            released = conn.execute(
                 "UPDATE repair_appointments SET status='SUPERSEDED', updated_at_ms=? "
                 "WHERE task_id=? AND status IN ('CONFIRMED','PROPOSED')",
-                (_now_ms(), task_id),
-            )
-            cur.execute(
-                "UPDATE repair_tasks SET assignee_id=?, status='ACCEPTED', version=version+1, updated_at_ms=? "
-                "WHERE task_id=?",
-                (new_assignee_id, _now_ms(), task_id),
-            )
-            new_ver = row["version"] + 1
-            self._record_action(cur, actor_id, idem_key, "reassign",
-                                row["project_id"], task_id, expected_version, "OK",
-                                payload_hash=payload_hash, error_detail=reason)
-            cur.execute(
-                "INSERT INTO repair_events (task_id, task_version, event_type, actor_id, before_state, after_state, at_ms) "
-                "VALUES (?,?,?,?,?,?,?)",
-                (task_id, new_ver, "reassign", actor_id,
-                 json.dumps({"status": row["status"]}, ensure_ascii=False),
-                 json.dumps({"assignee_id": new_assignee_id, "status": "ACCEPTED", "reason": reason},
-                            ensure_ascii=False),
-                 _now_ms()),
-            )
-            return {
-                "task_id": task_id, "assignee_id": new_assignee_id,
-                "status": "ACCEPTED", "version": new_ver, "reason": reason,
-            }
+                (self.executor.now(), task_id)).rowcount
+            jobs = self.executor._cancel_pending_jobs(conn, task_id)
+            self.executor._transition(
+                conn, task_id, expected_version, "ACCEPTED", actor_id, "reassign",
+                extra_after={"assignee_id": new_assignee_id, "reason": reason})
+            conn.execute("UPDATE repair_tasks SET assignee_id=? WHERE task_id=?",
+                         (new_assignee_id, task_id))
+            return {"task_id": task_id, "assignee_id": new_assignee_id,
+                    "status": "ACCEPTED", "task_version": task["version"] + 1,
+                    "reason": reason, "released_appointments": released,
+                    "cancelled_jobs": jobs}
+
+        res = self._run(command="reassign", actor_id=actor_id, idem_key=idem_key,
+                        task_id=task_id, expected_version=expected_version,
+                        params={"task_id": task_id, "expected_version": expected_version,
+                                "new_assignee_id": new_assignee_id, "reason": reason},
+                        body=body)
+        return res.data
