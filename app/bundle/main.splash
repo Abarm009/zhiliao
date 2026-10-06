@@ -295,10 +295,10 @@ fn load(){
         if raw != nil {
             let l = raw.len()
             if l > 0 { EVENT_LOG = raw }
+        } else {
+            // 旧 JSONL 触发备份：把 STATE.status 提示落盘到 state.json
+            saveState()
         }
-        // raw == nil 时 loadJsonlLines 已经把旧 JSONL 备份到
-        // events.jsonl.legacy.<ts>.bak，STATE.status 也已写入迁移提示；
-        // 此处保留原文件（不被覆盖），等待人工恢复。
     }
     // 旧版伪 READY 演示证据迁移；触达则立刻写盘
     let migrated = scrubLegacyEvidence()

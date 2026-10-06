@@ -8,7 +8,7 @@
 
 | 关 | 命令 | 结果 | 备注 |
 |---|---|---|---|
-| stamp | `hub stamp app/bundle` | `1e1912a421751881bd9f63b51791a9552cec86c631c5f737d0224607b88a0b96` | recheck 修后最终 hash |
+| stamp | `hub stamp app/bundle` | `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579` | recheck 后最终 hash |
 | check | `hub check app/bundle --allow-unsigned` | `octosense-repair 0.1.0-b — PASSED` | warning: publisher-signature unsigned（首版声明 unsigned） |
 | scan | `hub scan app/bundle --packet ...` | packet 7 项问题 | 由**发布者自己**回答，route=pass；**不是独立 reviewer 通过** |
 
@@ -147,7 +147,7 @@ review 指出 runCommand 计算 `hit = receiptFor(...)` 后没用，删除了 co
 ## 8. 文件与可复跑
 
 - `app/bundle/main.splash` 974 行（含头部 24 行注释）
-- `app/bundle/manifest.json` version=`0.1.0-b`，integrity.bundle_blake3=`5503136c...`
+- `app/bundle/manifest.json` version=`0.1.0-b`，integrity.bundle_blake3=`e5b477c7...`（recheck 后最终）
 - `app/bundle/listing.json` B 版 release_notes 指向本目录
 - `submission/2026-10-06-native/bundle/octosense-repair-0.1.0-b.zip` 1.5 MiB
 - `submission/2026-10-06-native/SHA256SUMS` 文件清单与校验和

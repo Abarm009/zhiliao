@@ -101,9 +101,9 @@ A 版固定 commit `6d81d57b1436c6df3c233b65b9313e3a3bf9d84b`，材料在 `submi
 |---|---|---|
 | bundle 文件 | `octosense-repair-0.1.0.zip` | `octosense-repair-0.1.0-b.zip` |
 | `manifest.version` | `0.1.0` | `0.1.0-b` |
-| `integrity.bundle_blake3` | `eff13f557080fc12ac2961f6bee83a2365f3d8fb5ac0e56681cee45b13c4ad26` | `5503136c95285db99b7ab95ef151073803ee26da424ccd589f34a9bc0c5e32a1`（review 后） |
+| `integrity.bundle_blake3` | `eff13f557080fc12ac2961f6bee83a2365f3d8fb5ac0e56681cee45b13c4ad26` | `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`（recheck 后最终） |
 | ZIP sha256 | `3cb784dbc4fe2bb3a072621a1c6db7f62d718643b1b1992d33812b0980b6f49b` | 见 `SHA256SUMS` |
 | main.splash 行数 | 1002（含 ScrollYView） | 974（单页紧凑布局 + review 修复） |
 | 截图 | 7 张（A 版工作台） | 6 张原生 + 2 张 A 版占位 = 8 张 |
 
-**注意**：本轮之前 SOURCES / README 中曾错误标注 A 版 blake3 为 `23e56ea0...`（那是上一轮重 stamp 前的旧值），实际 A 版 commit `6d81d57b` 上的真实值是 `eff13f55...`。**修正后的版本以上表为准**。
+**注意**：本轮之前 SOURCES / README 中曾错误标注 A 版 blake3 为 `23e56ea0...`（那是上一轮重 stamp 前的旧值），实际 A 版 commit `6d81d57b:app/bundle/manifest.json` 上的真实值是 `eff13f55...`。**修正后的版本以上表为准**。

@@ -25,13 +25,13 @@ Submit octosense-repair 0.1.0-b
 
 - **公开仓库**：`https://github.com/Abarm009/zhiliao`
 - **B 版固定 tag**：`octosense-repair-b-v0.1.0`（待用户授权后冻结并 push）
-- **B 版固定 commit**：见冻结后 commit 链接（stamp blake3 `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca` 与 commit 文件一一对应）
+- **B 版固定 commit**：见冻结后 commit 链接（stamp blake3 `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579` 与 commit 文件一一对应，recheck 后最终）
 - **A 版固定 commit**：`6d81d57b1436c6df3c233b65b9313e3a3bf9d84b`（保留作为 Web/后端演示与普通话视频对应版本）
 
 ### 3. Bundle 路径
 
 - **包文件**：`https://github.com/Abarm009/zhiliao/blob/<B-commit>/submission/2026-10-06-native/bundle/octosense-repair-0.1.0-b.zip`（或同仓 raw 下载）
-- **stamp blake3**：`1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`
+- **stamp blake3**：`e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`（recheck 后最终）
 - **SHA256**：见 `submission/2026-10-06-native/SHA256SUMS`
 - **大小**：1.5 MiB（< 8 MiB 白名单）
 
@@ -46,7 +46,7 @@ grants: capabilities {"storage"}, hosts {}, storage 16777216 bytes, agent none
 
 ### 4a. 完整 stamp 记录
 
-- stamp blake3: `1e1912a421751881bd9f63b51791a9552cec86c631c5f737d0224607b88a0b96`
+- stamp blake3: `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`（recheck 后最终）
 - manifest.version: `0.1.0-b`
 - 与 A 版（commit `6d81d57b`，manifest.version `0.1.0`，bundle_blake3 `eff13f557080fc12ac2961f6bee83a2365f3d8fb5ac0e56681cee45b13c4ad26`）互不覆盖。
 

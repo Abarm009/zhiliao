@@ -14,7 +14,7 @@
 
 - [82 秒正式普通话视频](submission/2026-10-06/video/zhiliao-demo-putonghua.mp4)（用户选定 Serena 温和女声 + 原创器乐）
 - [7 张截图](submission/2026-10-06/screenshots/README.md)（Web 演示页面 + 原生界面占位）
-- [A 版应用包](submission/2026-10-06/bundle/octosense-repair-0.1.0.zip)（stamp blake3 `23e56ea0db7094aad446e9c67d3f5ebdbf7c4647d0ff6bc4f5d43d733106b26c`）
+- [A 版应用包](submission/2026-10-06/bundle/octosense-repair-0.1.0.zip)（stamp blake3 `eff13f557080fc12ac2961f6bee83a2365f3d8fb5ac0e56681cee45b13c4ad26`）
 - [A 版核验与边界](submission/2026-10-06/VERIFICATION.md)
 
 ### B 版（最新 OctoSense 原生候选 · 2026-10-06）
@@ -22,7 +22,7 @@
 固定 tag `octosense-repair-b-v0.1.0`（待用户授权后冻结）。入口 [submission/2026-10-06-native/README.md](submission/2026-10-06-native/README.md)。
 
 - [6 张真实原生截图](submission/2026-10-06-native/screenshots/)（覆盖 DRAFT→OPEN→ACCEPTED→SCHEDULED→IN_PROGRESS→AWAITING_ACCEPTANCE→COMPLETED 全闭环 + 重启回读）
-- [B 版应用包](submission/2026-10-06-native/bundle/octosense-repair-0.1.0-b.zip)（stamp blake3 `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`，1.5 MiB）
+- [B 版应用包](submission/2026-10-06-native/bundle/octosense-repair-0.1.0-b.zip)（stamp blake3 `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`，1.5 MiB）
 - [B 版核验清单](submission/2026-10-06-native/VERIFICATION.md)
 - [B 版已知限制](submission/2026-10-06-native/KNOWN_LIMITATIONS.md)
 - [B 版组件版本来源](submission/2026-10-06-native/SOURCES.md)
@@ -37,7 +37,7 @@ A 版与 B 版关键差异：
 
 ### B 版（最新 OctoSense 原生候选）— 构建成功 + 原生验证通过 + 待递交
 
-- **hub stamp**：blake3 `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`，幂等验证通过。
+- **hub stamp**：blake3 `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`，幂等验证通过。
 - **hub check**：`octosense-repair 0.1.0 — PASSED`（仅 publisher-signature unsigned warning，已声明首版 unsigned）。
 - **hub scan**：packet 7 项问题已逐条答复，route = pass（建议人类复核但不阻塞）。
 - **原生闭环**：DRAFT→OPEN→ACCEPTED→SCHEDULED→IN_PROGRESS→AWAITING_ACCEPTANCE→COMPLETED 由真实 card-host（Hub@6741dea / Shell@a5d847a / Octoscript@68f6a9df / Octoscript-Makepad@b33f494b / Makepad@4fdcfccc）加载本应用 `main.splash` 实测跑通；6 张真实原生截图存档。

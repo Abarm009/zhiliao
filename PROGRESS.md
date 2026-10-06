@@ -320,3 +320,27 @@ python3 docs/implementation/verify_pack.py
 > - **旧数据**：旧 demo 证据 load 时自动清洗 + 旧 JSONL load 时备份迁移；不再假装兼容
 > - **待递交**：App Hub Issue 草稿在 HUB_ISSUE.md，**未经用户授权不发出**
 > - **未收录**：Hub catalog 未收录
+
+**2026-10-07 00:55 Asia/Shanghai（10-06 第六次定版 · recheck FINAL 收尾）**
+
+> **Recheck FINAL 来源**：`docs/build-loop/RECHECK_NATIVE_B_FINAL_2026-10-06.md`，4 项遗留：
+>
+> - **P1 发布文档未统一（已修）**：全文 grep 旧 hash `1ac7bb...` / `5503136c...` / `ab69db...` / `23e56ea0...` / `1e1912a4...` 全部替换为 `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`（最终 stamp）。README 表格 A 版 blake3 从错的 `23e56ea0...` 改为真实 `eff13f55...`（commit `6d81d57b` manifest 实测值）。README line 82 「addEvidence 写入 ready:true」改为「写入 ready:false, demo:true」。SOURCES / VERIFICATION / HUB_ISSUE / HOST_NOTE / scan-packet.answers 全部同步。
+> - **P1 旧 JSONL 备份成功且不覆盖原文件（已修）**：`loadJsonlLines` 用 try-catch 包裹 `fs.write(backup, text)`，备份成功才把 STATE.status 写为「⚠ events.jsonl 是旧 JSONL 多行格式；已备份至 events.jsonl.legacy.bak。原文件保留不覆盖；旧事件需人工迁移或放弃。」，备份失败时写「⚠ ... 备份失败！原文件保留不覆盖，请人工处理。」**修前 bug**：备份失败时仍执行后续 saveEvents() 覆盖；**修后**：loadJsonlLines 返回 nil 时，load() 不调用 saveEvents()，原文件不被覆盖。备份路径改为固定 `events.jsonl.legacy.bak`，二次启动检测到备份已存在时不重复触发。
+> - **P1 清理条件过宽（已修）**：`scrubLegacyEvidence` 不再凭 `bytes==1024` 判 demo——只识别 `sha=="demo-sha"` 或 `name.starts_with("demo-")`。实测：合法 1024 字节的 `report.pdf`（name 非 demo-，sha 非 demo-sha）保留 `ready=True`；演示占位 `demo-old.bin`（name 以 demo- 开头）scrub 为 `ready:false, demo:true, bytes:0, sha:''`。
+> - **去 DEBUG（已修）**：删掉 `STATE.debug_split` debug 字段；loadJsonlLines 改用清晰迁移提示文本（带 ⚠ emoji）。
+>
+> **真实宿主验证（recheck FINAL 后）**：
+> - 收窄 scrub 测试：`/tmp/zhiliao_recheck_legacy_v4/octosense-repair/tasks.json` 含 `report.pdf`（1024 bytes 真实附件）+ `demo-old.bin`（demo 占位）→ load 后 `report.pdf` ready=True 保留，`demo-old.bin` ready=False demo=True bytes=0 ✓
+> - 不重复备份测试：第一次启动生成 `events.jsonl.legacy.bak`；第二次启动检测到已存在，STATE.status 显示「旧备份 ... 存在，原文件保留不覆盖」，不再写新备份 ✓
+> - STATE.status 清晰提示：第一次启动显示「已备份至 events.jsonl.legacy.bak。原文件保留不覆盖；旧事件需人工迁移或放弃。」；第二次启动显示「仍是旧 JSONL 多行格式；旧备份 ... 存在...」
+> - stamp / check / scan：blake3 = `e5b477c7...`；check `octosense-repair 0.1.0-b — PASSED`；scan packet 7 项自答
+> - ZIP sha256 = `6a58e27ade7255760e19b6b7229d744eb92799958fd84c728bf0d46c4de1fa12`，1.5 MiB
+> - 30 项 SHA256SUMS（含 zip + 14 截图 + 5 check 文件 + 3 probe JSON + 4 bundle 源文件 + 4 文档）
+>
+> **状态口径（recheck FINAL 后）**：
+> - **构建成功**：stamp `e5b477c7...` + check PASSED + scan 7 项自答 route=pass
+> - **原生验证通过**：新建数据 DRAFT→OPEN→ACCEPTED→SCHEDULED 真实点击跑通；旧 demo 证据（旧 review 数据）load 时按 demo-sha/demo- 前缀精确识别并 scrub；旧 JSONL 多行 load 时备份保留原文件不覆盖；submitCompletion 在无真实附件时被阻断；多次 setActor 按 visible 过滤
+> - **不冒充**：不开工到 COMPLETED（picker 缺失 + scheduler timing）；不声称 UI 路径已验证 hit/conflict 分支（UI 不可达）；不声称「最新 OctoSense 已验证」；scan 7 项由发布者自答，不是独立 reviewer 通过
+> - **待递交**：App Hub Issue 草稿在 HUB_ISSUE.md，**未经用户授权不发出**
+> - **未收录**：Hub catalog 未收录

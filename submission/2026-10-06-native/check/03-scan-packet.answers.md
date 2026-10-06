@@ -1,7 +1,7 @@
 # Scan Packet · 7 项逐条回答
 
 **包**：`octosense-repair 0.1.0`
-**stamp blake3**：`1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`
+**stamp blake3**：`e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`（recheck 后最终）
 **scan 时间**：2026-10-06（Asia/Shanghai），card-host=`runtime/native-build/OctoSense-App-Hub/target/release/card-host`（Hub@6741dea / Shell@a5d847a / Octoscript@68f6a9df / Octoscript-Makepad@b33f494b / Makepad@4fdcfccc）
 **packet 源文件**：`runtime/build-loop/b-stamp-check/03-scan-packet.json`
 **证据文件**：`runtime/build-loop/native-screens/01..06-*.png`、`app/bundle/main.splash`、`app/bundle/manifest.json`
@@ -81,7 +81,7 @@
 
 理由：
 
-- 包准入三关（stamp / check / scan）全部通过：`stamp blake3=1ac7bb26...`、`check: octosense-repair 0.1.0 — PASSED`（仅 publisher-signature unsigned warning，已声明首版 unsigned）、`scan` 输出 packet 无 reject 项。
+- 包准入三关（stamp / check / scan）发布者侧全部通过：`stamp blake3=e5b477c7...`、`check: octosense-repair 0.1.0-b — PASSED`（仅 publisher-signature unsigned warning，已声明首版 unsigned）、`scan` 输出 packet 7 项问题（**由发布者自己回答**，route=pass；**不是独立 reviewer 通过**——reviewer 应基于 packet 重新判定）。
 - granted capability 与可见行为一致（仅 `storage`）；网络、agent、计算资源全部声明为 0；不引入供应链代码（脚本是单文件 `main.splash`，无 npm/cargo/二进制依赖）。
 - 主要 UI 文本中性、无系统冒充、无 prompt 注入、无辱骂；reviewer 担心的常见红线全部未触发。
 - 已知限制已显式记录、不冒充通过：app picker、隔离存储读字节 API、grant 申请/关闭/到期路径、真实模型接入。`addEvidence`（563）在缺失宿主 picker 时写入 `ready:true` 并附 demo note，未声明真实附件已落盘。

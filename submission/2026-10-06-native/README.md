@@ -40,7 +40,7 @@ submission/2026-10-06-native/
 | 维度 | A 版 | B 版 |
 |---|---|---|
 | 包名 | `octosense-repair-0.1.0.zip` | `octosense-repair-0.1.0-b.zip` |
-| stamp blake3 | `23e56ea0db7094aad446e9c67d3f5ebdbf7c4647d0ff6bc4f5d43d733106b26c` | `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca` |
+| stamp blake3 | `eff13f557080fc12ac2961f6bee83a2365f3d8fb5ac0e56681cee45b13c4ad26`（A 版 commit `6d81d57b` manifest 实测值） | `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`（recheck 后最终） |
 | main.splash | 1002 行 ScrollYView，N1/N2 未修 | 956 行单页紧凑布局，N1/N2 实质修复 |
 | 原生截图 | 2 张（A 版 01-main / 02-after-draft） | 6 张（覆盖 DRAFT→OPEN→ACCEPTED→SCHEDULED→IN_PROGRESS→AWAITING→COMPLETED 全闭环 + 重启回读） |
 | listing.release_notes | 引向 A 版 submission | 引向本目录，明确 A/B 差异、列出已知限制 |
@@ -69,7 +69,7 @@ submission/2026-10-06-native/
 
 | 关 | 命令 | 结果 |
 |---|---|---|
-| stamp | `hub stamp app/bundle` | `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`（写回 manifest.integrity.bundle_blake3） |
+| stamp | `hub stamp app/bundle` | `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`（recheck 后最终；写回 manifest.integrity.bundle_blake3） |
 | check | `hub check app/bundle --allow-unsigned` | `octosense-repair 0.1.0 — PASSED`（仅 publisher-signature unsigned warning） |
 | scan | `hub scan app/bundle --packet ...` | packet 7 项问题，逐条答复（`check/03-scan-packet.answers.md`） |
 | 白名单 | 1.5 MiB（< 8 MiB 上限） | icon 仅本应用自有 `assets/icon.svg` |
@@ -79,11 +79,11 @@ submission/2026-10-06-native/
 
 见 [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)。摘要：
 
-- **App picker 缺失**：宿主未提供文件选择面，`addEvidence` 写入 `ready:true` 标记为演示，证据未真实落盘。
+- **App picker 缺失**：宿主未提供文件选择面，`addEvidence` 写入 `ready:false, demo:true` 占位（修后行为，不再伪造 ready），证据未真实落盘。
 - **隔离存储读字节 API 缺失**：脚本可 `fs.write` 但不能 `fs.read_bytes`，证据下载/校对未做。
 - **grant 生命周期**：申请/关闭/到期路径未在脚本内实现；脚本只声明了 `capabilities`，UI 上没有 grant 管理面板。
 - **真实模型未接通**：`compute.agent: null`；脚本不调用任何模型。AI 助手、grant 自动决策等仍待平台后续验证。
-- **demo 预约时窗**：`proposeAppointment` 用 `now+10s` 起，便于一次会话内跑完整闭环；真实业务规则仍是「开始时间不晚于 30 天后 + 时长 15-240 分钟」。
+- **demo 预约时窗**：`proposeAppointment` 用 `now+10s` 起，便于一次会话内跑通 demo 流程；真实业务规则仍是「开始时间不晚于 30 天后 + 时长 15-240 分钟」。
 - **卡顿与重排**：固定版本 card-host 在多次 setActor 后，按钮位置会向下移动（label 重排）。实测时每次切换身份后必须重读 snap、固定 click 坐标，不能跨多次身份切换复用。
 
 ## 本地复跑
@@ -129,7 +129,7 @@ $PROJECT_ROOT/runtime/native-build/OctoSense-App-Hub/target/release/card-host \
 
 ## 当前状态口径（review 后修正）
 
-- **构建成功**：stamp blake3 `1e1912a421751881bd9f63b51791a9552cec86c631c5f737d0224607b88a0b96`，check PASSED，scan packet 7 项由发布者自答 route=pass。
+- **构建成功**：stamp blake3 `e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579`，check PASSED，scan packet 7 项由发布者自答 route=pass。
 - **原生验证通过**：DRAFT→OPEN→ACCEPTED→SCHEDULED 真实点击跑通；IN_PROGRESS 通过合成 tasks.json 验证；B-R01/B-R02/B-R03/B-R05 review 修复全部经真实宿主验证。**开工 step 在自动化时窗内有 scheduler timing 限制**（review 已知）。
 - **未递交**：App Hub Issue 草稿见 [HUB_ISSUE.md](HUB_ISSUE.md)，**未经用户授权不发出**。
 - **未收录**：不声称 Hub catalog 已收录。
