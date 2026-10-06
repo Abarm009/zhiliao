@@ -1,0 +1,531 @@
+{
+  "steps": [
+    {
+      "step": "legacy_loaded",
+      "facts": {
+        "state.json": {
+          "actor": "u-tech-1",
+          "project": "prj-A",
+          "selectedIdx": 0,
+          "status": "DEBUG: events raw is nil"
+        },
+        "tasks.json": [
+          {
+            "version": 8,
+            "asset": "as-a-1",
+            "contact": "报修人一",
+            "updatedAtMs": 1791296929792,
+            "contactInfo": "渠道：工作台",
+            "reporter": "u-reporter-1",
+            "completions": [],
+            "problem": "东侧会议室空调不制冷，希望今天下午处理",
+            "assignee": "u-tech-1",
+            "id": "1791296667648-1-u-reporter-1",
+            "category": "HVAC_NOT_COOLING",
+            "project": "prj-A",
+            "notes": [
+              {
+                "kind": "INSPECTION",
+                "note": "到场检查压缩机与滤网",
+                "by": "u-tech-1",
+                "at": 1791296929792
+              }
+            ],
+            "status": "IN_PROGRESS",
+            "evidence": [
+              {
+                "id": "1791296929792-3-u-tech-1",
+                "name": "demo-1791296929792-3-u-tech-1.bin",
+                "bytes": 0,
+                "sha": "",
+                "ready": false,
+                "by": "u-tech-1",
+                "at": 1791296929792,
+                "note": "迁移自旧版演示占位：宿主 picker 缺失，真实附件未落盘",
+                "demo": true
+              }
+            ],
+            "space": "sp-a-1",
+            "pinnedBy": [],
+            "createdAtMs": 1791296667648,
+            "appointments": [
+              {
+                "id": "1791296667648-12-u-tech-1",
+                "tech": "u-tech-1",
+                "startMs": 1791296677648,
+                "endMs": 1791298477648,
+                "status": "CONFIRMED",
+                "proposedBy": "u-tech-1",
+                "confirmedBy": "u-reporter-1",
+                "reason": "",
+                "createdMs": 1791296667648
+              }
+            ]
+          }
+        ],
+        "actions.jsonl": [
+          {
+            "action_id": "1791296667648-3-u-reporter-1",
+            "key": "1791296667648-2-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "createDraft",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"createDraft\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"problem\":\"东侧会议室空调不制冷，希望今天下午处理\"}}",
+            "at": 1791296667648,
+            "result": {
+              "task_id": "1791296667648-1-u-reporter-1",
+              "status": "DRAFT"
+            }
+          },
+          {
+            "action_id": "1791296667648-5-u-reporter-1",
+            "key": "1791296667648-4-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "confirmDraft",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"confirmDraft\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "OPEN"
+            }
+          },
+          {
+            "action_id": "1791296667648-7-u-tech-1",
+            "key": "1791296667648-6-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "acceptTask",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"acceptTask\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "ACCEPTED"
+            }
+          },
+          {
+            "action_id": "1791296667648-9-u-tech-1",
+            "key": "1791296667648-8-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "bindAsset",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"bindAsset\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"asset_id\":\"as-a-1\",\"reason\":\"\"}}",
+            "at": 1791296667648,
+            "result": {
+              "asset_id": "as-a-1"
+            }
+          },
+          {
+            "action_id": "1791296667648-11-u-tech-1",
+            "key": "1791296667648-10-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "proposeAppointment",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"proposeAppointment\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"start_at_ms\":1791296677648,\"end_at_ms\":1791298477648}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "ACCEPTED"
+            }
+          },
+          {
+            "action_id": "1791296667648-14-u-reporter-1",
+            "key": "1791296667648-13-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "confirmAppointment",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"confirmAppointment\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"appointment_id\":\"1791296667648-12-u-tech-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "CONFIRMED"
+            }
+          },
+          {
+            "action_id": "1791296798720-16-u-tech-1",
+            "key": "1791296798720-15-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "startProgress",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"startProgress\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296798720,
+            "result": {
+              "status": "IN_PROGRESS"
+            }
+          },
+          {
+            "action_id": "1791296929792-2-u-tech-1",
+            "key": "1791296929792-1-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "recordProgress",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"recordProgress\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"kind\":\"INSPECTION\",\"note\":\"到场检查压缩机与滤网\"}}",
+            "at": 1791296929792,
+            "result": {
+              "note": "已记录"
+            }
+          }
+        ],
+        "events.jsonl": []
+      },
+      "labels": [
+        "Card host [remote]",
+        "维修协作",
+        "OctoSense Repair · 持久应用",
+        "📋 当前任务",
+        "1791296667648-1-u-reporter-1 · IN_PROGRESS · 承接 u-tech-1 · 设备 as-a-1 · 已确认预约",
+        "联系方式：渠道：工作台 · 证据 0 件 · 完工轮次 0",
+        "📍 DEBUG: events raw is nil",
+        "任务 1 条 · 事件 0 条（events.jsonl）· 回执 8 条（actions.jsonl）"
+      ]
+    },
+    {
+      "step": "提交完工",
+      "facts": {
+        "state.json": {
+          "actor": "u-tech-1",
+          "project": "prj-A",
+          "selectedIdx": 0,
+          "status": "拒绝：完工前必须至少有一份可读证据；请先上传或解除隔离"
+        },
+        "tasks.json": [
+          {
+            "version": 8,
+            "asset": "as-a-1",
+            "contact": "报修人一",
+            "updatedAtMs": 1791296929792,
+            "contactInfo": "渠道：工作台",
+            "reporter": "u-reporter-1",
+            "completions": [],
+            "problem": "东侧会议室空调不制冷，希望今天下午处理",
+            "assignee": "u-tech-1",
+            "id": "1791296667648-1-u-reporter-1",
+            "category": "HVAC_NOT_COOLING",
+            "project": "prj-A",
+            "notes": [
+              {
+                "kind": "INSPECTION",
+                "note": "到场检查压缩机与滤网",
+                "by": "u-tech-1",
+                "at": 1791296929792
+              }
+            ],
+            "status": "IN_PROGRESS",
+            "evidence": [
+              {
+                "id": "1791296929792-3-u-tech-1",
+                "name": "demo-1791296929792-3-u-tech-1.bin",
+                "bytes": 0,
+                "sha": "",
+                "ready": false,
+                "by": "u-tech-1",
+                "at": 1791296929792,
+                "note": "迁移自旧版演示占位：宿主 picker 缺失，真实附件未落盘",
+                "demo": true
+              }
+            ],
+            "space": "sp-a-1",
+            "pinnedBy": [],
+            "createdAtMs": 1791296667648,
+            "appointments": [
+              {
+                "id": "1791296667648-12-u-tech-1",
+                "tech": "u-tech-1",
+                "startMs": 1791296677648,
+                "endMs": 1791298477648,
+                "status": "CONFIRMED",
+                "proposedBy": "u-tech-1",
+                "confirmedBy": "u-reporter-1",
+                "reason": "",
+                "createdMs": 1791296667648
+              }
+            ]
+          }
+        ],
+        "actions.jsonl": [
+          {
+            "action_id": "1791296667648-3-u-reporter-1",
+            "key": "1791296667648-2-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "createDraft",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"createDraft\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"problem\":\"东侧会议室空调不制冷，希望今天下午处理\"}}",
+            "at": 1791296667648,
+            "result": {
+              "task_id": "1791296667648-1-u-reporter-1",
+              "status": "DRAFT"
+            }
+          },
+          {
+            "action_id": "1791296667648-5-u-reporter-1",
+            "key": "1791296667648-4-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "confirmDraft",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"confirmDraft\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "OPEN"
+            }
+          },
+          {
+            "action_id": "1791296667648-7-u-tech-1",
+            "key": "1791296667648-6-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "acceptTask",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"acceptTask\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "ACCEPTED"
+            }
+          },
+          {
+            "action_id": "1791296667648-9-u-tech-1",
+            "key": "1791296667648-8-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "bindAsset",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"bindAsset\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"asset_id\":\"as-a-1\",\"reason\":\"\"}}",
+            "at": 1791296667648,
+            "result": {
+              "asset_id": "as-a-1"
+            }
+          },
+          {
+            "action_id": "1791296667648-11-u-tech-1",
+            "key": "1791296667648-10-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "proposeAppointment",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"proposeAppointment\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"start_at_ms\":1791296677648,\"end_at_ms\":1791298477648}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "ACCEPTED"
+            }
+          },
+          {
+            "action_id": "1791296667648-14-u-reporter-1",
+            "key": "1791296667648-13-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "confirmAppointment",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"confirmAppointment\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"appointment_id\":\"1791296667648-12-u-tech-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "CONFIRMED"
+            }
+          },
+          {
+            "action_id": "1791296798720-16-u-tech-1",
+            "key": "1791296798720-15-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "startProgress",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"startProgress\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296798720,
+            "result": {
+              "status": "IN_PROGRESS"
+            }
+          },
+          {
+            "action_id": "1791296929792-2-u-tech-1",
+            "key": "1791296929792-1-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "recordProgress",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"recordProgress\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"kind\":\"INSPECTION\",\"note\":\"到场检查压缩机与滤网\"}}",
+            "at": 1791296929792,
+            "result": {
+              "note": "已记录"
+            }
+          }
+        ],
+        "events.jsonl": []
+      },
+      "labels": [
+        "Card host [remote]",
+        "维修协作",
+        "OctoSense Repair · 持久应用",
+        "📋 当前任务",
+        "1791296667648-1-u-reporter-1 · IN_PROGRESS · 承接 u-tech-1 · 设备 as-a-1 · 已确认预约",
+        "联系方式：渠道：工作台 · 证据 0 件 · 完工轮次 0",
+        "📍 DEBUG: events raw is nil",
+        "任务 1 条 · 事件 0 条（events.jsonl）· 回执 8 条（actions.jsonl）"
+      ]
+    },
+    {
+      "step": "legacy_fake_completion_blocked",
+      "facts": {
+        "state.json": {
+          "actor": "u-tech-1",
+          "project": "prj-A",
+          "selectedIdx": 0,
+          "status": "拒绝：完工前必须至少有一份可读证据；请先上传或解除隔离"
+        },
+        "tasks.json": [
+          {
+            "version": 8,
+            "asset": "as-a-1",
+            "contact": "报修人一",
+            "updatedAtMs": 1791296929792,
+            "contactInfo": "渠道：工作台",
+            "reporter": "u-reporter-1",
+            "completions": [],
+            "problem": "东侧会议室空调不制冷，希望今天下午处理",
+            "assignee": "u-tech-1",
+            "id": "1791296667648-1-u-reporter-1",
+            "category": "HVAC_NOT_COOLING",
+            "project": "prj-A",
+            "notes": [
+              {
+                "kind": "INSPECTION",
+                "note": "到场检查压缩机与滤网",
+                "by": "u-tech-1",
+                "at": 1791296929792
+              }
+            ],
+            "status": "IN_PROGRESS",
+            "evidence": [
+              {
+                "id": "1791296929792-3-u-tech-1",
+                "name": "demo-1791296929792-3-u-tech-1.bin",
+                "bytes": 0,
+                "sha": "",
+                "ready": false,
+                "by": "u-tech-1",
+                "at": 1791296929792,
+                "note": "迁移自旧版演示占位：宿主 picker 缺失，真实附件未落盘",
+                "demo": true
+              }
+            ],
+            "space": "sp-a-1",
+            "pinnedBy": [],
+            "createdAtMs": 1791296667648,
+            "appointments": [
+              {
+                "id": "1791296667648-12-u-tech-1",
+                "tech": "u-tech-1",
+                "startMs": 1791296677648,
+                "endMs": 1791298477648,
+                "status": "CONFIRMED",
+                "proposedBy": "u-tech-1",
+                "confirmedBy": "u-reporter-1",
+                "reason": "",
+                "createdMs": 1791296667648
+              }
+            ]
+          }
+        ],
+        "actions.jsonl": [
+          {
+            "action_id": "1791296667648-3-u-reporter-1",
+            "key": "1791296667648-2-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "createDraft",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"createDraft\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"problem\":\"东侧会议室空调不制冷，希望今天下午处理\"}}",
+            "at": 1791296667648,
+            "result": {
+              "task_id": "1791296667648-1-u-reporter-1",
+              "status": "DRAFT"
+            }
+          },
+          {
+            "action_id": "1791296667648-5-u-reporter-1",
+            "key": "1791296667648-4-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "confirmDraft",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"confirmDraft\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "OPEN"
+            }
+          },
+          {
+            "action_id": "1791296667648-7-u-tech-1",
+            "key": "1791296667648-6-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "acceptTask",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"acceptTask\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "ACCEPTED"
+            }
+          },
+          {
+            "action_id": "1791296667648-9-u-tech-1",
+            "key": "1791296667648-8-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "bindAsset",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"bindAsset\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"asset_id\":\"as-a-1\",\"reason\":\"\"}}",
+            "at": 1791296667648,
+            "result": {
+              "asset_id": "as-a-1"
+            }
+          },
+          {
+            "action_id": "1791296667648-11-u-tech-1",
+            "key": "1791296667648-10-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "proposeAppointment",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"proposeAppointment\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"start_at_ms\":1791296677648,\"end_at_ms\":1791298477648}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "ACCEPTED"
+            }
+          },
+          {
+            "action_id": "1791296667648-14-u-reporter-1",
+            "key": "1791296667648-13-u-reporter-1",
+            "actor": "u-reporter-1",
+            "command": "confirmAppointment",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"confirmAppointment\",\"actor\":\"u-reporter-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"appointment_id\":\"1791296667648-12-u-tech-1\"}}",
+            "at": 1791296667648,
+            "result": {
+              "status": "CONFIRMED"
+            }
+          },
+          {
+            "action_id": "1791296798720-16-u-tech-1",
+            "key": "1791296798720-15-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "startProgress",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"startProgress\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\"}}",
+            "at": 1791296798720,
+            "result": {
+              "status": "IN_PROGRESS"
+            }
+          },
+          {
+            "action_id": "1791296929792-2-u-tech-1",
+            "key": "1791296929792-1-u-tech-1",
+            "actor": "u-tech-1",
+            "command": "recordProgress",
+            "task_id": "1791296667648-1-u-reporter-1",
+            "fp": "{\"command\":\"recordProgress\",\"actor\":\"u-tech-1\",\"project\":\"prj-A\",\"task\":\"1791296667648-1-u-reporter-1\",\"params\":{\"task_id\":\"1791296667648-1-u-reporter-1\",\"kind\":\"INSPECTION\",\"note\":\"到场检查压缩机与滤网\"}}",
+            "at": 1791296929792,
+            "result": {
+              "note": "已记录"
+            }
+          }
+        ],
+        "events.jsonl": []
+      },
+      "labels": [
+        "Card host [remote]",
+        "维修协作",
+        "OctoSense Repair · 持久应用",
+        "📋 当前任务",
+        "1791296667648-1-u-reporter-1 · IN_PROGRESS · 承接 u-tech-1 · 设备 as-a-1 · 已确认预约",
+        "联系方式：渠道：工作台 · 证据 0 件 · 完工轮次 0",
+        "📍 拒绝：完工前必须至少有一份可读证据；请先上传或解除隔离",
+        "任务 1 条 · 事件 0 条（events.jsonl）· 回执 8 条（actions.jsonl）"
+      ]
+    }
+  ],
+  "legacy_event_backup_exact": true,
+  "active_events": []
+}

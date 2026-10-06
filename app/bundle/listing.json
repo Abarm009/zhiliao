@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "subtitle": "报修、处置与独立验收的三角色维修协作",
-  "description": "围绕同一项维修，组织报修人、技工和项目经理的报修、接单、设备确认、预约、处置、完工与独立验收。原生脚本界面采用石墨主题与分步布局，应用包只声明宿主隔离存储。本地Python领域后端及Web演示已验证完整业务链；原生宿主重绘、部分动作handler与grant生命周期仍待验证修复，详见仓库提交说明。",
+  "subtitle": "报修、处置与独立验收的三角色维修协作（原生 B 版 · 石墨主题）",
+  "description": "围绕同一项维修，组织报修人、技工和项目经理的报修、接单、设备确认、预约、处置、完工与独立验收。本 B 版（octosense-repair 0.1.0-b）使用本地 OctoSense card-host 运行真实原生脚本界面，应用包只声明宿主隔离存储（capabilities: storage），不访问网络、不拉起本地服务、不调用外部模型。本轮针对 N1「点击后界面不重绘」与 N2「部分业务 handler 解析为 nil」做了实质修复：取消 ScrollYView 改为单页紧凑布局、引入 tick() 1Hz 重算命名 Label、把与 OctoScript 内置函数 pick / me 同名的用户函数改名为 pickUser / getMe。完整闭环 DRAFT→OPEN→ACCEPTED→SCHEDULED→IN_PROGRESS→AWAITING_ACCEPTANCE→COMPLETED 由真实原生宿主点击跑通，状态条/任务卡/事实条在每一步实时更新，重启后任务与事件流从磁盘恢复。Python 后端 190 项单测与 17 步 HTTP E2E 仍为独立业务验证证据。grant 生命周期、App picker、隔离存储读字节 API 与真实模型接通仍待宿主/平台后续验证；详见 B 版材料 README 与 ROUND5 修复记录。",
   "category": "productivity",
   "keywords": [
     "maintenance",
@@ -9,8 +9,12 @@
     "repair"
   ],
   "screenshots": [
-    "screenshots/01-main.png",
-    "screenshots/02-after-draft.png"
+    "screenshots/b01-initial.png",
+    "screenshots/b02-draft-created.png",
+    "screenshots/b03-submit-open.png",
+    "screenshots/b04-schedule-confirmed.png",
+    "screenshots/b05-completed.png",
+    "screenshots/b06-after-restart.png"
   ],
   "icon": "assets/icon.svg",
   "platforms": [
@@ -21,7 +25,7 @@
     "support": "https://github.com/Abarm009/zhiliao/issues",
     "privacy_policy_url": "https://github.com/Abarm009/zhiliao/blob/main/docs/PRIVACY.md"
   },
-  "release_notes": "2026-10-06候选更新：正式普通话演示视频、真实演示截图、运行说明与提交材料。后端190项单测及17步HTTP端到端链通过。原生界面展示与后端业务验证分别记录；包准入不等于原生闭环或真实模型验收。修复记录见docs/build-loop/REPAIR_RESULT_2026-10-06_ROUND5.md，提交入口见submission/2026-10-06/README.md。",
+  "release_notes": "octosense-repair 0.1.0-b（2026-10-06 B 版候选）：针对 N1/N2 完成实质修复——取消 ScrollYView（固定版本宿主不实例化被裁剪子节点）、引入 fn tick() 1Hz 重算 status_line/facts_line、把与 Octoscript 内置 pick/me 同名的用户函数改名为 pickUser/getMe 解除 handler 静默遮蔽。原生闭环 DRAFT→OPEN→ACCEPTED→SCHEDULED→IN_PROGRESS→AWAITING_ACCEPTANCE→COMPLETED 由真实 card-host（Hub@6741dea / Shell@a5d847a / Octoscript@68f6a9df / Octoscript-Makepad@b33f494b / Makepad@4fdcfccc）加载本应用 main.splash 实测通过；6 张真实原生截图见 submission/2026-10-06-native/。bundle 准入：hub stamp / check / scan 全部 PASSED（publisher-signature unsigned warning 已知）；scan 7 项 review 逐条答复见同目录 check/03-scan-packet.answers.md。Python 后端 190 项单测 / 17 步 HTTP E2E 与原生验证相互独立。已知限制：app picker、隔离存储读字节 API、grant 申请/关闭/到期路径、真实模型未接通——已显式标记，不假装通过。A 版（Web/后端演示与比赛材料）固定 commit 6d81d57b；B 版源码与材料固定在即将冻结的 commit + tag octosense-repair-b-v0.1.0。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

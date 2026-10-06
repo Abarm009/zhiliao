@@ -1,25 +1,65 @@
 # 知了 · 维修任务协作
 
+> **当前上传为待修复候选，未通过完整验收。** 最新独立复验与剩余问题见[当前候选状态](submission/2026-10-06-native/CURRENT_REVIEW_STATUS.md)；下文旧完成截图和历史验证表述不代表当前版本已通过。
+
 队伍名：**知了**。Agentic App 2026 初赛项目，围绕同一项维修任务组织报修人、技工与项目经理的协作：报修 → 接单 → 设备确认 → 预约 → 处置 → 完工 → 独立验收 / 退回重做。
 
 ## 演示与提交材料
 
-**[2026-10-06 提交入口](submission/2026-10-06/README.md)**：82 秒正式普通话视频、7 张截图、字幕、应用包及本轮核验记录。
+**两条独立交付（A 版 + B 版），不互相覆盖**。
 
-- [观看 / 下载视频](submission/2026-10-06/video/zhiliao-demo-putonghua.mp4)：用户选定 Serena 温和女声，正式普通话旁白，配原创器乐；沿用已录制的流程展示画面。
-- [截图说明](submission/2026-10-06/screenshots/README.md)：真实本地演示页面与原生界面展示，使用合成数据。
-- [原生脚本应用包](submission/2026-10-06/bundle/octosense-repair-0.1.0.zip)。
-- [本轮验证与已知边界](submission/2026-10-06/VERIFICATION.md)。
+### A 版（Web/后端演示与比赛材料 · 2026-10-06）
+
+固定 commit `6d81d57b1436c6df3c233b65b9313e3a3bf9d84b`。入口 [submission/2026-10-06/README.md](submission/2026-10-06/README.md)。
+
+- [82 秒正式普通话视频](submission/2026-10-06/video/zhiliao-demo-putonghua.mp4)（用户选定 Serena 温和女声 + 原创器乐）
+- [7 张截图](submission/2026-10-06/screenshots/README.md)（Web 演示页面 + 原生界面占位）
+- [A 版应用包](submission/2026-10-06/bundle/octosense-repair-0.1.0.zip)（stamp blake3 `23e56ea0db7094aad446e9c67d3f5ebdbf7c4647d0ff6bc4f5d43d733106b26c`）
+- [A 版核验与边界](submission/2026-10-06/VERIFICATION.md)
+
+### B 版（最新 OctoSense 原生候选 · 2026-10-06）
+
+固定 tag `octosense-repair-b-v0.1.0`（待用户授权后冻结）。入口 [submission/2026-10-06-native/README.md](submission/2026-10-06-native/README.md)。
+
+- [6 张真实原生截图](submission/2026-10-06-native/screenshots/)（覆盖 DRAFT→OPEN→ACCEPTED→SCHEDULED→IN_PROGRESS→AWAITING_ACCEPTANCE→COMPLETED 全闭环 + 重启回读）
+- [B 版应用包](submission/2026-10-06-native/bundle/octosense-repair-0.1.0-b.zip)（stamp blake3 `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`，1.5 MiB）
+- [B 版核验清单](submission/2026-10-06-native/VERIFICATION.md)
+- [B 版已知限制](submission/2026-10-06-native/KNOWN_LIMITATIONS.md)
+- [B 版组件版本来源](submission/2026-10-06-native/SOURCES.md)
+- [B 版 App Hub Issue 草稿](submission/2026-10-06-native/HUB_ISSUE.md)（待用户授权后发出）
+- [主办方进展说明草稿](submission/2026-10-06-native/HOST_NOTE.md)（待用户授权后发出）
+
+A 版与 B 版关键差异：
 
 ![报修人独立验收完成](submission/2026-10-06/screenshots/05-completed.png)
 
 ## 当前验证状态
 
-2026-10-06 本轮复跑：后端 **190 项单测通过**，**17 步 HTTP 业务链通过**（含退回、第二轮完工、幂等回放与终态拒绝）；本次截图任务在报修人页面完成验收，状态为 `COMPLETED`。`hub check --allow-unsigned` 通过，publisher 未签名。
+### B 版（最新 OctoSense 原生候选）— 构建成功 + 原生验证通过 + 待递交
 
-**整体仍为 NOT READY**：验收台账 31 PASS / 28 NOT_RUN / 2 FAIL / 3 BLOCKED。原生宿主重绘、部分动作 handler、grant 生命周期和真实模型接入尚未通过完整验收。Python/Web 业务验证、原生界面展示及包准入分别记录。AI 助手属于待接通范围；视频配音模型与应用 AI 能力无关。
+- **hub stamp**：blake3 `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`，幂等验证通过。
+- **hub check**：`octosense-repair 0.1.0 — PASSED`（仅 publisher-signature unsigned warning，已声明首版 unsigned）。
+- **hub scan**：packet 7 项问题已逐条答复，route = pass（建议人类复核但不阻塞）。
+- **原生闭环**：DRAFT→OPEN→ACCEPTED→SCHEDULED→IN_PROGRESS→AWAITING_ACCEPTANCE→COMPLETED 由真实 card-host（Hub@6741dea / Shell@a5d847a / Octoscript@68f6a9df / Octoscript-Makepad@b33f494b / Makepad@4fdcfccc）加载本应用 `main.splash` 实测跑通；6 张真实原生截图存档。
+- **N1/N2 修复**：取消 ScrollYView + `fn tick()` 1Hz + `refreshLabels(taskToShow)` 命名 Label 主动更新；`pick`/`me` 重命名为 `pickUser`/`getMe` 解除 OctoScript 内置函数遮蔽。
+- **持久化与重启**：state.json / tasks.json / actions.jsonl / events.jsonl 在 `--app-data` 真实落盘；`kill card-host && 重启` 后任务列表与事件流完整回读。
+- **不冒充通过**：App picker、隔离存储读字节 API、grant 生命周期、真实模型接入仍为已知限制；详见 [B 版 KNOWN_LIMITATIONS](submission/2026-10-06-native/KNOWN_LIMITATIONS.md)。
 
-本次更新源码仓库与展示材料；Hub 收录、商店上架和新的赛事回执尚未完成。此前仓库登记记录见 [源码提交回执](docs/build-loop/REPOSITORY_SUBMISSION_2026-10-02.md)。
+### A 版（Web/后端演示与比赛材料）— 已递交素材
+
+- **固定 commit**：`6d81d57b1436c6df3c233b65b9313e3a3bf9d84b`。
+- **82 秒正式普通话视频 + 7 张截图 + 应用包** 全部就位。
+- **业务验证**：后端 190 项单测通过（63.70s），17 步 HTTP E2E PASS（含退回、幂等回放与终态拒绝）。
+
+### 整体 NOT READY · 区分四个状态
+
+构建成功 ≠ 原生验证通过 ≠ 已递交 ≠ 已收录。当前：
+
+- B 版：**构建成功 + 原生验证通过 + 待递交**（App Hub Issue 草稿 [HUB_ISSUE.md](submission/2026-10-06-native/HUB_ISSUE.md) 待用户授权发出；推 origin 与 tag 冻结同样待用户授权）。
+- A 版：**构建成功 + 已递交比赛素材**（仓库 `6d81d57b` 已就位；比赛官方回执与 Hub 收录仍未到位）。
+- 验收台账：31 PASS / 28 NOT_RUN / 2 FAIL / 3 BLOCKED（VALID 结构）；后端 P0 缺陷（T02/T03/T05/T08/T16/T17/T18/T29）与原生 T29 grant 仍未修，详见 `docs/build-loop/REVIEW_2026-10-02.md` 与 B 版 KNOWN_LIMITATIONS。
+- AI 助手、grant 自动决策属于待接通范围；视频配音模型（Serena / Qwen3-TTS / MLX）与应用 AI 能力无关。
+- 此前仓库登记记录见 [源码提交回执](docs/build-loop/REPOSITORY_SUBMISSION_2026-10-02.md)。
 
 ## 本地运行
 

@@ -1,0 +1,5 @@
+{
+  "B-R02_code_path": "recovered (runCommand returns false on hit/conflict)",
+  "B-R02_dynamic_UI_replay": "unreachable: each click generates fresh LAST_KEY",
+  "note": "review-noted limit; runCommand hit/conflict code path is unit-test-able but not UI-reachable"
+}

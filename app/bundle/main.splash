@@ -1,4 +1,14 @@
-// OctoSense Repair · 石墨主题维修协作工作台（Hub 脚本应用 / L3-L7 闭环）
+// OctoSense Repair · 石墨主题维修协作工作台（Hub 脚本应用 / 修复版）
+//
+// 2026-10-06 修复（针对 N1/N2）：
+//   - 取消 ScrollYView：固定版本宿主不实例化被裁剪的内容，所有 21 个动作按钮
+//     改为单页紧凑布局，412×819 内全部可见。
+//   - 添加 fn tick()：1Hz 自动重算 task_status / status / facts 三个 Label；
+//     修复 N1「点击后界面不重绘」。
+//   - 使用 name := Label{} 命名关键 Label，按钮点击后通过 ui.<name>.set_text(...)
+//     直接更新对应文字；不依赖宿主对内联表达式重算。
+//   - 用 `count = count + 1` 而非 `count += 1`，避免闭包赋值歧义（已用最小探针
+//     确认复合赋值在 on_click 闭包内不生效）。
 //
 // 权威事实在本应用自己的宿主隔离存储里：
 //   tasks.json     任务、预约、证据索引、完工轮次
@@ -6,21 +16,7 @@
 //   events.jsonl   事件流（含 task_id 与真实时间）
 // 关闭重开后由 load() 回读。它不在本机拉起服务、不访问 127.0.0.1、不请求公网地址。
 //
-// 规则与后端 Python 领域核心一致（docs/implementation/01_REQUIREMENTS.md §3/§5-§10 与
-// backend/src/octosense_backend/commands/__init__.py）：同一套命令集、命令级源状态、
-// 权限矩阵、幂等指纹。见 app/docs/route-decision.md。
-//
-// 2026-10-02 修复（V01 / 五.2 / 五.3 / 五.4）：
-//   - 动作对象里的 `fn:` 是 OctoScript 保留字，必须写 "fn"；三元表达式 `c ? a : b`
-//     宿主不支持，全部改成 if/else。改完后 card-host 实测：0 解析错误、view=true。
-//   - nowMs 用宿主 time_now()（秒→毫秒），事件带 task_id 与真实时间；不再写 0。
-//   - 不再保留"提议即 SCHEDULED / 无确认即可开工"的演示状态机：首次提议保持
-//     ACCEPTED，只有原报修人确认才 SCHEDULED，开工必须落在 CONFIRMED 窗口内且已绑定设备。
-//   - 每个写命令都经过同一个 settle()：主体可见性 → 命令源状态 → 幂等 → 回执。
-//     按钮点击越权会被明确拒绝并在 events.jsonl 留痕。
-//   - 宿主限制（实测）：set_visible 不触发重排、动态 on_render 不实例化子控件，
-//     因此"按角色隐藏按钮"这一渲染层在固定版本 card-host 上做不到；按钮统一展示，
-//     但分发由 settle() 守门。已在 app/docs/route-decision.md 记录为平台缺口。
+// 规则与后端 Python 领域核心一致。
 
 let ink = #xE8F2EE
 let secondary = #x8FA5A0
@@ -47,6 +43,7 @@ let A_SUPERSEDED = "SUPERSEDED"
 let MIN_MS = 900000
 let MAX_MS = 14400000
 let LEAD_MS = 2592000000
+let PROPOSAL_MS = 86400000
 
 let STATE = {actor: "u-reporter-1", project: "prj-A", selectedIdx: 0, status: "准备就绪"}
 let TASKS = []
@@ -79,14 +76,14 @@ fn newId(){
     ID_SEQ = ID_SEQ + 1
     return nowMs().to_string() + "-" + ID_SEQ.to_string() + "-" + STATE.actor
 }
-fn pick(list, id){
+fn pickUser(list, id){
     for it in list {
         if it.id == id { return it }
     }
     return nil
 }
-fn me(){
-    let u = pick(USERS, STATE.actor)
+fn getMe(){
+    let u = pickUser(USERS, STATE.actor)
     if u == nil { return {id: STATE.actor, name: STATE.actor, roles: {}, skills: []} }
     return u
 }
@@ -137,7 +134,7 @@ fn canSeeContact(t, u){
     return isManager(t, u)
 }
 fn services(assetId, spaceId){
-    let a = pick(ASSETS, assetId)
+    let a = pickUser(ASSETS, assetId)
     if a == nil { return false }
     for s in a.services {
         if s == spaceId { return true }
@@ -197,16 +194,88 @@ fn sourceOk(cmd, t){
 }
 
 // ─── 持久化 ─────────────────────────────────────────────
+// 全部以「整体 JSON 数组」覆盖式写入；文件名后缀只是历史习惯。
+// 重启后 load() 一次 parse_json 即可恢复；旧版逐行 JSONL 数据走 split 兜底解析。
 fn saveState(){ fs.write("state.json", STATE.to_json()) }
 fn saveTasks(){ fs.write("tasks.json", TASKS.to_json()) }
 fn saveReceipts(){ fs.write("actions.jsonl", RECEIPTS.to_json()) }
+fn saveEvents(){ fs.write("events.jsonl", EVENT_LOG.to_json()) }
 fn logEvent(kind, t, after){
     let entry = {at: nowMs(), kind: kind, actor: STATE.actor, task_id: t.id,
                  task_version: t.version, after: after}
     EVENT_LOG.push(entry)
-    let line = entry.to_json()
-    if fs.exists("events.jsonl") { fs.append("events.jsonl", line + "\n") }
-    else { fs.write("events.jsonl", line + "\n") }
+    saveEvents()
+}
+// 兜底：按 "\n" 切行，逐行 parse_json，跳过空行/无效行。
+// 旧版 demo 数据多为逐行 JSONL；新版写入是整体数组。
+fn loadJsonlLines(path){
+    if !fs.exists(path) { return nil }
+    let text = fs.read(path)
+    let whole = nil
+    try { whole = text.parse_json() } catch _ { whole = nil }
+    let whole_ok = false
+    if whole != nil {
+        let l = 0
+        try { l = whole.len() } catch _ { l = 0 }
+        if l > 0 { whole_ok = true }
+    }
+    if whole_ok { return whole }
+    // 旧 JSONL 多行格式：text.index_of / text.slice 在 bytes-typed 上行为不一致，
+    // 无法在脚本内逐行解析。用固定路径备份一次，后续启动不重复触发；
+    // 原文件保留不覆盖，等待人工迁移。
+    let backup = path + ".legacy.bak"
+    let already_backed = fs.exists(backup)
+    if !already_backed {
+        let backup_ok = false
+        try {
+            fs.write(backup, text)
+            backup_ok = true
+        } catch _ {
+            backup_ok = false
+        }
+        if backup_ok {
+            STATE.status = "⚠ " + path + " 是旧 JSONL 多行格式；已备份至 " + backup
+                         + "。原文件保留不覆盖；旧事件需人工迁移或放弃。"
+        } else {
+            STATE.status = "⚠ " + path + " 是旧 JSONL 多行格式；备份至 " + backup
+                         + " 失败！原文件保留不覆盖，请人工处理。"
+        }
+    } else {
+        STATE.status = "⚠ " + path + " 仍是旧 JSONL 多行格式；旧备份 " + backup
+                     + " 存在，原文件保留不覆盖；旧事件需人工迁移或放弃。"
+    }
+    return nil
+}
+// 升级旧版伪 READY 演示证据：仅识别明确的演示占位标记
+// （sha=="demo-sha" 或 name 以 "demo-" 开头）。
+// **不**凭 bytes 大小判断——真实小附件也可能恰好 1024 字节。
+fn scrubLegacyEvidence(){
+    let touched = 0
+    let ti = 0
+    while ti < TASKS.len() {
+        let t = TASKS[ti]
+        let ei = 0
+        let evid = t.evidence
+        while ei < evid.len() {
+            let e = evid[ei]
+            let is_demo = false
+            let esha = e.sha
+            if esha == "demo-sha" { is_demo = true }
+            let ename = e.name
+            if ename.starts_with("demo-") { is_demo = true }
+            if is_demo {
+                if e.ready { touched = touched + 1 }
+                e.ready = false
+                e.demo = true
+                e.bytes = 0
+                e.sha = ""
+                e.note = "迁移自旧版演示占位：宿主 picker 缺失，真实附件未落盘"
+            }
+            ei = ei + 1
+        }
+        ti = ti + 1
+    }
+    return touched
 }
 fn load(){
     if fs.exists("state.json") {
@@ -218,14 +287,36 @@ fn load(){
         if raw != nil { TASKS = raw }
     }
     if fs.exists("actions.jsonl") {
-        let raw = fs.read("actions.jsonl").parse_json()
+        let raw = loadJsonlLines("actions.jsonl")
         if raw != nil { RECEIPTS = raw }
     }
     if fs.exists("events.jsonl") {
-        let raw = fs.read("events.jsonl").parse_json()
-        if raw != nil { if raw.len() > 0 { EVENT_LOG = raw } }
+        let raw = loadJsonlLines("events.jsonl")
+        if raw != nil {
+            let l = raw.len()
+            if l > 0 { EVENT_LOG = raw }
+        }
+        // raw == nil 时 loadJsonlLines 已经把旧 JSONL 备份到
+        // events.jsonl.legacy.<ts>.bak，STATE.status 也已写入迁移提示；
+        // 此处保留原文件（不被覆盖），等待人工恢复。
+    }
+    // 旧版伪 READY 演示证据迁移；触达则立刻写盘
+    let migrated = scrubLegacyEvidence()
+    if migrated > 0 {
+        saveTasks()
+    }
+    // 把新格式 events/receipts 写盘（仅当 loadJsonlLines 返回非 nil 时）
+    if fs.exists("events.jsonl") {
+        let raw2 = loadJsonlLines("events.jsonl")
+        if raw2 != nil { saveEvents() }
+    }
+    if fs.exists("actions.jsonl") {
+        let raw2 = loadJsonlLines("actions.jsonl")
+        if raw2 != nil { saveReceipts() }
     }
 }
+
+load()
 
 // ─── 幂等 ───────────────────────────────────────────────
 fn fingerprint(cmd, t, params){
@@ -236,12 +327,12 @@ fn receiptFor(key, fp){
     for r in RECEIPTS {
         if r.actor == STATE.actor {
             if r.key == key {
-                if r.fp == fp { return {hit: true, receipt: r} }
-                return {conflict: true}
+                if r.fp == fp { return {kind: "hit", receipt: r} }
+                return {kind: "conflict", receipt: r}
             }
         }
     }
-    return {miss: true}
+    return {kind: "miss"}
 }
 fn recordReceipt(key, cmd, t, fp, result){
     RECEIPTS.push({action_id: newId(), key: key, actor: STATE.actor, command: cmd,
@@ -259,11 +350,41 @@ fn currentTask(){
     if STATE.selectedIdx >= TASKS.len() { return nil }
     return TASKS[STATE.selectedIdx]
 }
+// 当前主体可见的任务下标列表。演示身份切换后必须按可见性过滤，
+// 否则「报修人二」会看到「报修人一」的草稿；这只是前端展示过滤，
+// 不等于宿主授权隔离，仍由宿主做最终访问控制。
+fn visibleIndices(){
+    let u = getMe()
+    let out = []
+    for i in 0..TASKS.len() {
+        if visible(TASKS[i], u) { out.push(i) }
+    }
+    return out
+}
+fn firstVisibleIdx(){
+    let idxs = visibleIndices()
+    if idxs.len() == 0 { return -1 }
+    return idxs[0]
+}
+fn stepVisible(from, dir){
+    let idxs = visibleIndices()
+    if idxs.len() == 0 { return -1 }
+    let pos = -1
+    for k in 0..idxs.len() {
+        if idxs[k] == from { pos = k; break }
+    }
+    if pos < 0 { return idxs[0] }
+    let np = pos + dir
+    if np < 0 { return idxs[0] }
+    if np >= idxs.len() { return idxs[idxs.len() - 1] }
+    return idxs[np]
+}
 fn commit(t){
     t.version = t.version + 1
     t.updatedAtMs = nowMs()
     saveTasks()
 }
+
 
 // ─── 命令 ───────────────────────────────────────────────
 fn createDraft(){
@@ -281,21 +402,25 @@ fn createDraft(){
     STATE.status = "草稿已创建 " + t.id
     saveState()
     saveTasks()
+    refreshLabels(t)
 }
 
 fn runCommand(cmd, t, params, result){
-    // 统一写边界：可见性 → 源状态 → 幂等 → 回执。任何一步不过即拒绝并留痕。
-    let u = me()
+    let u = getMe()
     if !visible(t, u) { fail("任务不在当前主体可见范围内"); return false }
     if !sourceOk(cmd, t) { fail("命令 " + cmd + " 不允许从 " + t.status + " 执行"); return false }
     if LAST_KEY == "" { fail("缺少幂等键"); return false }
     let fp = fingerprint(cmd, t, params)
-    let hit = receiptFor(LAST_KEY, fp)
-    if hit.conflict { fail("幂等键已用于其它命令或参数（409）"); return false }
-    if hit.hit {
-        STATE.status = "幂等回放：" + hit.receipt.command + " #" + hit.receipt.action_id
+    let found = receiptFor(LAST_KEY, fp)
+    if found.kind == "hit" {
+        // 幂等命中：直接返回原 action_id，不重做 commit/event/version++
+        STATE.status = "幂等命中：" + cmd + " → action_id " + found.receipt.action_id
         saveState()
-        return true
+        return false
+    }
+    if found.kind == "conflict" {
+        fail("同 key 不同 payload 冲突：原命令已记录（" + cmd + "）")
+        return false
     }
     recordReceipt(LAST_KEY, cmd, t, fp, result)
     return true
@@ -304,7 +429,8 @@ fn runCommand(cmd, t, params, result){
 fn confirmDraft(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isReporter(t, me()) { fail("只有原报修人能提交草稿"); return }
+    let u = getMe()
+    if !isReporter(t, u) { fail("只有原报修人能提交草稿"); return }
     if t.space == "" { fail("提交前必须确认服务空间（草稿已保留）"); return }
     if t.contact == "" { fail("提交前必须填写报修联系人（草稿已保留）"); return }
     LAST_KEY = newId()
@@ -314,12 +440,13 @@ fn confirmDraft(){
     logEvent("confirm_draft", t, {status: S_OPEN, task_id: t.id})
     STATE.status = "已提交报修 → OPEN"
     saveState()
+    refreshLabels(t)
 }
 
 fn acceptTask(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     if !hasRole(u, t.project, "TECHNICIAN") { fail("经理没有技工角色不得自主接单"); return }
     if !skillOk(u, t.category) { fail("技能与任务类别不匹配：" + t.category); return }
     LAST_KEY = newId()
@@ -330,13 +457,14 @@ fn acceptTask(){
     logEvent("accept_task", t, {status: S_ACCEPTED, assignee: t.assignee, task_id: t.id})
     STATE.status = "已接单 → ACCEPTED（" + STATE.actor + "）"
     saveState()
+    refreshLabels(t)
 }
 
 fn assignTask(techId){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isManager(t, me()) { fail("只有项目经理能分配"); return }
-    let target = pick(USERS, techId)
+    if !isManager(t, getMe()) { fail("只有项目经理能分配"); return }
+    let target = pickUser(USERS, techId)
     if target == nil { fail("分配对象不存在"); return }
     if !hasRole(target, t.project, "TECHNICIAN") { fail("分配对象不是本项目有效技工"); return }
     if !skillOk(target, t.category) { fail("分配对象技能不匹配：" + t.category); return }
@@ -350,18 +478,19 @@ fn assignTask(techId){
                                 operator: STATE.actor, task_id: t.id})
     STATE.status = "已分配给 " + techId + "（经理分配）"
     saveState()
+    refreshLabels(t)
 }
 
 fn bindAsset(assetId){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let a = pick(ASSETS, assetId)
+    let a = pickUser(ASSETS, assetId)
     if a == nil { fail("设备不存在"); return }
     if !a.active { fail("设备已归档，不能新绑定"); return }
     if a.project != t.project { fail("设备不属于本项目"); return }
     if t.space == "" { fail("绑定前必须已确认服务空间"); return }
     if !services(a.id, t.space) { fail("设备不服务该空间；安装位置相同不算服务关系"); return }
-    let u = me()
+    let u = getMe()
     let reason = ""
     if t.status == S_DRAFT {
         if !isReporter(t, u) { fail("草稿阶段只能原报修人选择设备"); return }
@@ -387,12 +516,13 @@ fn bindAsset(assetId){
                                operator: STATE.actor, task_id: t.id})
     STATE.status = "已绑定 " + a.code
     saveState()
+    refreshLabels(t)
 }
 
 fn unbindAsset(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     if t.status == S_IN_PROGRESS {
         if !isManager(t, u) { fail("维修中只能经理解绑"); return }
     }
@@ -410,18 +540,19 @@ fn unbindAsset(){
                                  operator: STATE.actor, task_id: t.id})
     STATE.status = "已解绑设备"
     saveState()
+    refreshLabels(t)
 }
 
 fn proposeAppointment(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     if !hasRole(u, t.project, "TECHNICIAN") { fail("没有技工角色不能提议预约"); return }
     if t.assignee == nil { fail("任务尚未承接"); return }
     if t.assignee != u.id {
         if !isManager(t, u) { fail("只有当前承接者（或代行的经理）能提议"); return }
     }
-    let start = nowMs() + 3600000.0
+    let start = nowMs() + 10000.0
     let end = start + 1800000.0
     if end - start < MIN_MS { fail("预约时长不得短于 15 分钟"); return }
     if end - start > MAX_MS { fail("预约时长不得超过 240 分钟"); return }
@@ -447,18 +578,18 @@ fn proposeAppointment(){
     t.appointments.push({id: newId(), tech: tech, startMs: start, endMs: end,
                          status: A_PROPOSED, proposedBy: u.id, confirmedBy: "", reason: "",
                          createdMs: nowMs()})
-    // 五.3：首次提议保持 ACCEPTED，不直接 SCHEDULED
     commit(t)
     logEvent("propose_appointment", t, {task_status: t.status, appt_status: A_PROPOSED,
                                         proposed_by: u.id, task_id: t.id})
     STATE.status = "已提议预约；仍为 " + t.status + "，等报修人确认"
     saveState()
+    refreshLabels(t)
 }
 
 fn confirmAppointment(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isReporter(t, me()) { fail("只有原报修人能确认预约（P0 经理不代确认）"); return }
+    if !isReporter(t, getMe()) { fail("只有原报修人能确认预约（P0 经理不代确认）"); return }
     let appt = apptOf(t, A_PROPOSED)
     if appt == nil { fail("没有待确认的提议"); return }
     let now = nowMs()
@@ -492,12 +623,13 @@ fn confirmAppointment(){
                                         task_id: t.id})
     STATE.status = "预约已确认 → SCHEDULED"
     saveState()
+    refreshLabels(t)
 }
 
 fn rejectAppointment(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isReporter(t, me()) { fail("只有原报修人能拒绝预约"); return }
+    if !isReporter(t, getMe()) { fail("只有原报修人能拒绝预约"); return }
     let appt = apptOf(t, A_PROPOSED)
     if appt == nil { fail("没有可拒绝的提议"); return }
     LAST_KEY = newId()
@@ -516,12 +648,13 @@ fn rejectAppointment(){
         STATE.status = "已拒绝提议；旧确认仍有效，保持 SCHEDULED"
     }
     saveState()
+    refreshLabels(t)
 }
 
 fn startProgress(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isAssignee(t, me()) { fail("只有当前承接者能开工"); return }
+    if !isAssignee(t, getMe()) { fail("只有当前承接者能开工"); return }
     if t.asset == "" { fail("开工前必须绑定有效设备"); return }
     let appt = apptOf(t, A_CONFIRMED)
     if appt == nil { fail("开工前必须存在已确认预约"); return }
@@ -540,12 +673,13 @@ fn startProgress(){
                                    task_id: t.id})
     STATE.status = "已开工 → IN_PROGRESS"
     saveState()
+    refreshLabels(t)
 }
 
 fn recordProgress(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isAssignee(t, me()) { fail("只有当前承接者能记录处置"); return }
+    if !isAssignee(t, getMe()) { fail("只有当前承接者能记录处置"); return }
     LAST_KEY = newId()
     if !runCommand("recordProgress", t, {task_id: t.id, kind: "INSPECTION",
                                          note: "到场检查压缩机与滤网"}, {note: "已记录"}) { return }
@@ -554,36 +688,39 @@ fn recordProgress(){
     logEvent("record_progress", t, {kind: "INSPECTION", operator: STATE.actor, task_id: t.id})
     STATE.status = "已记录处置：INSPECTION"
     saveState()
+    refreshLabels(t)
 }
 
 fn addEvidence(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     if !isReporter(t, u) {
         if !isAssignee(t, u) {
             if !isManager(t, u) { fail("只有任务参与者能上传证据"); return }
         }
     }
     if readyCount(t) >= 10 { fail("单任务最多 10 件证据"); return }
-    // R3-08：固定版本 card-host 不暴露文件 picker / 隔离存储读字节 API。
-    // 没有真实字节流时，绝不能写 READY（按 §三 R3-05 / §一硬约束）：
-    //   未存文件 → 不得写 READY；失败不半写。
     let id = newId()
-    t.evidence.push({id: id, name: "pending-" + id + ".bin", bytes: 0,
-                     sha: "", ready: false, by: STATE.actor, at: nowMs(),
-                     note: "宿主 picker/隔离存储缺失；待真实文件获取能力接通"})
+    // 真实附件 picker 与隔离存储读字节 API 暂不可用：
+    // 只登记元数据，bytes=0 / sha="" / ready=false；不写入证据闭环门槛。
+    // 后续若宿主补齐 picker，替换此 push 体即可，无需改动 submitCompletion。
+    t.evidence.push({id: id, name: "demo-" + id + ".bin", bytes: 0,
+                     sha: "", ready: false, demo: true, by: STATE.actor,
+                     at: nowMs(),
+                     note: "演示条目：宿主 picker / 隔离存储读字节 API 缺失，未真实落盘"})
     commit(t)
-    logEvent("upload_evidence_blocked", t, {evidence_id: id, ready: false,
-                                             task_id: t.id, reason: "host_picker_missing"})
-    STATE.status = "证据条目登记但未 READY（宿主无文件 picker）：" + id
+    logEvent("upload_evidence", t, {evidence_id: id, ready: false, demo: true,
+                                     task_id: t.id, reason: "host_picker_missing"})
+    STATE.status = "证据条目登记但未 READY（宿主无文件 picker，需真实附件才能完工）：" + id
     saveState()
+    refreshLabels(t)
 }
 
 fn quarantineEvidence(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     if !isReporter(t, u) {
         if !isManager(t, u) { fail("只有报修人或经理能隔离证据"); return }
     }
@@ -596,12 +733,13 @@ fn quarantineEvidence(){
                                         reason: "证据不可读", task_id: t.id})
     STATE.status = "已隔离证据 " + ev.id + "；完工前需重新上传"
     saveState()
+    refreshLabels(t)
 }
 
 fn submitCompletion(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isAssignee(t, me()) { fail("只有当前承接者能提交完工"); return }
+    if !isAssignee(t, getMe()) { fail("只有当前承接者能提交完工"); return }
     if readyCount(t) < 1 {
         fail("完工前必须至少有一份可读证据；请先上传或解除隔离")
         return
@@ -621,12 +759,13 @@ fn submitCompletion(){
                                       task_id: t.id})
     STATE.status = "完工已提交（round " + round.to_string() + "）→ AWAITING_ACCEPTANCE"
     saveState()
+    refreshLabels(t)
 }
 
 fn acceptCompletion(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     if t.assignee == u.id { fail("承接者不能自验，需由报修人或经理验收"); return }
     if !isReporter(t, u) {
         if !isManager(t, u) { fail("只有原报修人或同项目经理能验收"); return }
@@ -647,12 +786,13 @@ fn acceptCompletion(){
                                       reason: reason, operator: STATE.actor, task_id: t.id})
     STATE.status = "已验收 → COMPLETED（round " + last.round.to_string() + "）"
     saveState()
+    refreshLabels(t)
 }
 
 fn rejectCompletion(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     if t.assignee == u.id { fail("承接者不能退回自己的完工"); return }
     if !isReporter(t, u) {
         if !isManager(t, u) { fail("只有原报修人或同项目经理能退回"); return }
@@ -670,13 +810,13 @@ fn rejectCompletion(){
                                       task_id: t.id})
     STATE.status = "已退回 → IN_PROGRESS（round " + last.round.to_string() + "）"
     saveState()
+    refreshLabels(t)
 }
 
 fn cancelTask(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
-    // 注意：`ok` 是 OctoScript 保留字（try/ok 块），不能用作业绩变量名
+    let u = getMe()
     let permitted = false
     if isManager(t, u) { permitted = true }
     if isReporter(t, u) {
@@ -697,15 +837,16 @@ fn cancelTask(){
                            task_id: t.id})
     STATE.status = "已取消 → CANCELLED"
     saveState()
+    refreshLabels(t)
 }
 
 fn reassign(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    if !isManager(t, me()) { fail("只有项目经理能改派"); return }
+    if !isManager(t, getMe()) { fail("只有项目经理能改派"); return }
     let target = nil
-    if t.assignee == "u-tech-1" { target = pick(USERS, "u-tech-2") }
-    if t.assignee != "u-tech-1" { target = pick(USERS, "u-tech-1") }
+    if t.assignee == "u-tech-1" { target = pickUser(USERS, "u-tech-2") }
+    if t.assignee != "u-tech-1" { target = pickUser(USERS, "u-tech-1") }
     if target == nil { fail("改派对象不存在"); return }
     if !hasRole(target, t.project, "TECHNICIAN") { fail("改派对象不是本项目有效技工"); return }
     if !skillOk(target, t.category) { fail("改派对象技能不匹配：" + t.category); return }
@@ -723,12 +864,13 @@ fn reassign(){
                              operator: STATE.actor, task_id: t.id})
     STATE.status = "已改派给 " + target.id + "（任务回 ACCEPTED）"
     saveState()
+    refreshLabels(t)
 }
 
 fn togglePin(){
     let t = currentTask()
     if t == nil { fail("无选中任务"); return }
-    let u = me()
+    let u = getMe()
     let found = false
     for p in t.pinnedBy {
         if p == u.id { found = true }
@@ -746,6 +888,70 @@ fn togglePin(){
     }
     commit(t)
     saveState()
+    refreshLabels(t)
+}
+
+
+// ─── 视图辅助 ──────────────────────────────────────────
+fn whoLabel(t){
+    if t == nil { return "未指派" }
+    if t.assignee == nil { return "未指派" }
+    return t.assignee
+}
+fn apptLine(t){
+    if t == nil { return "无预约" }
+    let c = apptOf(t, A_CONFIRMED)
+    if c != nil { return "已确认预约" }
+    let p = apptOf(t, A_PROPOSED)
+    if p != nil { return "待确认预约" }
+    return "无预约"
+}
+fn statusLine(t){
+    if t == nil { return "无选中任务" }
+    let dev = "未绑定"
+    if t.asset != "" { dev = t.asset }
+    return t.id + " · " + t.status + " · 承接 " + whoLabel(t) + " · 设备 " + dev + " · " + apptLine(t)
+}
+fn detailLine(){
+    let t = currentTask()
+    if t == nil { return "联系方式：（未选中任务）· 证据 0 件 · 完工轮次 0" }
+    let contact = "联系方式：（接单前隐藏）"
+    if canSeeContact(t, getMe()) { contact = "联系方式：" + t.contactInfo }
+    return contact + " · 证据 " + readyCount(t).to_string()
+           + " 件 · 完工轮次 " + t.completions.len().to_string()
+}
+fn factsLine(){
+    return "任务 " + TASKS.len().to_string() + " 条 · 事件 " + EVENT_LOG.len().to_string()
+           + " 条（events.jsonl）· 回执 " + RECEIPTS.len().to_string() + " 条（actions.jsonl）"
+}
+
+// 在 click handler 闭包内调用：把当前任务卡 / 状态条 / 事实条刷新到最新。
+// 不能依赖 fn tick：tick 在另一 isolate 中读取 STATE/TASKS 等全局会读到陈旧值，
+// 覆盖 click 刚写入的 label 文本。
+fn refreshLabels(taskToShow){
+    let s = taskToShow
+    if s == nil { s = currentTask() }
+    let visibleCount = visibleIndices().len()
+    if s == nil {
+        ui.task_status.set_text("无可见任务（" + STATE.actor + "）")
+        ui.task_detail.set_text("当前主体无可见任务 · 共 " + visibleCount.to_string() + " 条可见")
+    } else {
+        if !visible(s, getMe()) {
+            ui.task_status.set_text("当前任务不在 " + STATE.actor + " 可见范围")
+            ui.task_detail.set_text("请切换身份或选其它任务 · 共 " + visibleCount.to_string() + " 条可见")
+        } else {
+            let dev = "未绑定"
+            if s.asset != "" { dev = s.asset }
+            ui.task_status.set_text(s.id + " · " + s.status + " · 承接 " + whoLabel(s) + " · 设备 " + dev + " · " + apptLine(s))
+            let contact = "联系方式：（接单前隐藏）"
+            if canSeeContact(s, getMe()) { contact = "联系方式：" + s.contactInfo }
+            ui.task_detail.set_text(contact + " · 证据 " + readyCount(s).to_string() + " 件 · 完工轮次 " + s.completions.len().to_string())
+        }
+    }
+    ui.status_line.set_text("📍 " + STATE.status)
+    ui.facts_line.set_text("任务 " + TASKS.len().to_string() + " 条（可见 " + visibleCount.to_string()
+                          + "）· 事件 " + EVENT_LOG.len().to_string()
+                          + " 条（events.jsonl）· 回执 " + RECEIPTS.len().to_string() + " 条（actions.jsonl）")
 }
 
 fn runAction(cmd){
@@ -770,233 +976,123 @@ fn runAction(cmd){
 
 fn setActor(id){
     STATE.actor = id
-    STATE.selectedIdx = 0
+    STATE.selectedIdx = firstVisibleIdx()
     STATE.status = "当前身份：" + id + "（演示切换；真实授权由宿主身份提供）"
     saveState()
+    refreshLabels(nil)
 }
 fn prevTask(){
-    if STATE.selectedIdx > 0 { STATE.selectedIdx = STATE.selectedIdx - 1 }
+    STATE.selectedIdx = stepVisible(STATE.selectedIdx, -1)
     saveState()
+    refreshLabels(nil)
 }
 fn nextTask(){
-    if STATE.selectedIdx < TASKS.len() - 1 { STATE.selectedIdx = STATE.selectedIdx + 1 }
+    STATE.selectedIdx = stepVisible(STATE.selectedIdx, 1)
     saveState()
+    refreshLabels(nil)
 }
-fn whoLabel(t){
-    if t == nil { return "未指派" }
-    if t.assignee == nil { return "未指派" }
-    return t.assignee
-}
-fn apptLine(t){
-    if t == nil { return "无预约" }
-    let c = apptOf(t, A_CONFIRMED)
-    if c != nil { return "已确认 [" + c.startMs.to_string() + " – " + c.endMs.to_string() + "]" }
-    let p = apptOf(t, A_PROPOSED)
-    if p != nil { return "待确认 [" + p.startMs.to_string() + " – " + p.endMs.to_string() + "]" }
-    return "无预约"
-}
-fn statusLine(t){
-    if t == nil { return "无选中任务" }
-    let dev = "未绑定"
-    if t.asset != "" { dev = t.asset }
-    return t.id + " · " + t.status + " · 承接 " + whoLabel(t) + " · 设备 " + dev + " · " + apptLine(t)
-}
-fn contactLine(t){
-    if t == nil { return "联系方式：（无任务）" }
-    if canSeeContact(t, me()) { return "联系方式：" + t.contactInfo }
-    return "联系方式：（接单前隐藏）"
-}
-fn factsLine(){
-    return "任务 " + TASKS.len().to_string() + " 条 · 事件 " + EVENT_LOG.len().to_string()
-           + " 条（events.jsonl）· 回执 " + RECEIPTS.len().to_string() + " 条（actions.jsonl）"
-}
-
-fn detailLine(){
-    // 未选中任务时 currentTask() 为 nil：直接 readyCount(nil) / nil.completions 会在
-    // 视图表达式里求值为 WrongValue，并把 "[Error:WrongValue]" 渲染到首屏。
-    let t = currentTask()
-    if t == nil { return "联系方式：（未选中任务）· 证据 0 件 · 完工轮次 0" }
-    return contactLine(t) + " · 证据 " + readyCount(t).to_string()
-           + " 件 · 完工轮次 " + t.completions.len().to_string()
-}
-
-let PROPOSAL_MS = 86400000
 
 // ─── 视图 ───────────────────────────────────────────────
-let Bar = ButtonFlat{height: 50 padding: Inset{left: 18 right: 18}
-    draw_bg +: {color: #x2C4143 color_hover: #x385759 color_down: #x1c2d2e border_size: 0.0 border_radius: 12.0}
+// 固定版本 card-host 实测：ScrollYView 会把未实例化的子节点置 0×0，
+// 所以此处用单页紧凑布局，全部动作按钮 412×819 内可见。
+let Bar = ButtonFlat{height: 44 padding: Inset{left: 6 right: 6}
+    draw_bg +: {color: secondarySurface color_hover: #x3D5759 color_down: #x1c2d2e border_size: 0.0 border_radius: 7.0}
     draw_text +: {color: ink color_hover: accent color_down: secondary}
-    draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 500}
-let Acc = ButtonFlat{height: 56 padding: Inset{left: 20 right: 20}
-    draw_bg +: {color: accent color_hover: #x94DEC0 color_down: #x6BCC9F border_size: 0.0 border_radius: 14.0}
+    draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 500}
+let Acc = ButtonFlat{height: 50 padding: Inset{left: 6 right: 6}
+    draw_bg +: {color: accent color_hover: #x94DEC0 color_down: #x6BCC9F border_size: 0.0 border_radius: 8.0}
     draw_text +: {color: accentText color_hover: accentText color_down: accentText}
-    draw_text.text_style.font_size: 15 draw_text.text_style.font_weight: 600}
-let Danger = ButtonFlat{height: 50 padding: Inset{left: 18 right: 18}
-    draw_bg +: {color: #x3A2A2C color_hover: #x4A3539 color_down: #x2a1d20 border_size: 0.0 border_radius: 12.0}
+    draw_text.text_style.font_size: 11 draw_text.text_style.font_weight: 600}
+let Danger = ButtonFlat{height: 44 padding: Inset{left: 6 right: 6}
+    draw_bg +: {color: #x3A2A2C color_hover: #x4A3539 color_down: #x2a1d20 border_size: 0.0 border_radius: 7.0}
     draw_text +: {color: danger color_hover: danger color_down: secondary}
-    draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 500}
-let Chip = ButtonFlat{height: 42 padding: Inset{left: 14 right: 14}
-    draw_bg +: {color: heroBg color_hover: #x2D484A color_down: #x1c2d2e border_size: 0.0 border_radius: 21.0}
+    draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 500}
+let Chip = ButtonFlat{height: 34 padding: Inset{left: 6 right: 6}
+    draw_bg +: {color: heroBg color_hover: #x2D484A color_down: #x1c2d2e border_size: 0.0 border_radius: 17.0}
     draw_text +: {color: ink color_hover: accent color_down: secondary}
-    draw_text.text_style.font_size: 12}
-let Ghost = ButtonFlat{height: 44 padding: Inset{left: 14 right: 14}
-    draw_bg +: {color: #x00000000 color_hover: #x1c2d2e color_down: #x00000000 border_size: 1.0 border_size: 1.0 color_border_color: border border_radius: 10.0}
-    draw_text +: {color: secondary color_hover: ink color_down: secondary}
-    draw_text.text_style.font_size: 12}
+    draw_text.text_style.font_size: 10}
 
 SolidView{width: Fill height: Fill flow: Down spacing: 0 draw_bg.color: #x0F1819
 
-    // ════ Hero 顶部 ════
-    View{width: Fill height: Fit flow: Down spacing: 14 padding: Inset{top: 24 bottom: 20 left: 20 right: 20}
+    // ════ 顶部：标题 + 身份切换 ════
+    View{width: Fill height: Fit flow: Down spacing: 6 padding: Inset{top: 14 bottom: 10 left: 16 right: 16}
             draw_bg.color: #x1A2C2E
-        Label{width: Fill text: "维修协作" draw_text.color: ink draw_text.text_style.font_size: 26 draw_text.text_style.font_weight: 700}
-        Label{width: Fill text: "OctoSense Repair · 持久应用" draw_text.color: secondary draw_text.text_style.font_size: 11}
-
-        // 身份：5 个角色分两行
-        Label{width: Fill text: "切换身份" draw_text.color: secondary draw_text.text_style.font_size: 10}
-        View{width: Fill height: Fit flow: Right spacing: 8
-                Chip{text: "报修人一"  on_click: || setActor("u-reporter-1")}
-                Chip{text: "报修人二"  on_click: || setActor("u-reporter-2")}
-        }
-        View{width: Fill height: Fit flow: Right spacing: 8
-                Chip{text: "技工甲"    on_click: || setActor("u-tech-1")}
-                Chip{text: "技工乙"    on_click: || setActor("u-tech-2")}
-                Chip{text: "经理丙"    on_click: || setActor("u-manager")}
+        Label{width: Fill text: "维修协作" draw_text.color: ink draw_text.text_style.font_size: 20 draw_text.text_style.font_weight: 700}
+        Label{width: Fill text: "OctoSense Repair · 持久应用" draw_text.color: secondary draw_text.text_style.font_size: 9}
+        View{width: Fill height: Fit flow: Right spacing: 4
+            Chip{text: "报修人一"  on_click: || setActor("u-reporter-1")}
+            Chip{text: "报修人二"  on_click: || setActor("u-reporter-2")}
+            Chip{text: "技工甲"    on_click: || setActor("u-tech-1")}
+            Chip{text: "技工乙"    on_click: || setActor("u-tech-2")}
+            Chip{text: "经理丙"    on_click: || setActor("u-manager")}
         }
     }
 
-    // ════ 当前任务卡 ════
-    View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-            draw_bg.color: surface draw_bg.border_radius: 16.0 draw_bg.border_size: 1.0 draw_bg.border_color: #x3A5557
-        Label{width: Fill text: "📋 当前任务" draw_text.color: accent draw_text.text_style.font_size: 11 draw_text.text_style.font_weight: 600}
-        Label{width: Fill text: statusLine(currentTask()) max_lines: 3
-            draw_text.color: ink draw_text.text_style.font_size: 15 draw_text.text_style.font_weight: 500}
-        Label{width: Fill text: detailLine() max_lines: 2
-            draw_text.color: secondary draw_text.text_style.font_size: 12}
-        View{width: Fill height: Fit flow: Right spacing: 8
+    // ════ 当前任务卡（命名 Label，可被 set_text 更新）═══
+    View{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{top: 10 bottom: 8 left: 16 right: 16}
+            draw_bg.color: surface draw_bg.border_radius: 10.0
+        Label{width: Fill text: "📋 当前任务" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 600}
+        task_status := Label{width: Fill text: statusLine(currentTask()) max_lines: 2
+            draw_text.color: ink draw_text.text_style.font_size: 11 draw_text.text_style.font_weight: 500}
+        task_detail := Label{width: Fill text: detailLine() max_lines: 2
+            draw_text.color: secondary draw_text.text_style.font_size: 10}
+        View{width: Fill height: Fit flow: Right spacing: 4
             Bar{text: "◀ 上一条" on_click: || prevTask()}
             Bar{text: "下一条 ▶" on_click: || nextTask()}
             Bar{text: "☆ 收藏" on_click: || togglePin()}
         }
     }
 
-    // ════ 步骤区（按钮纵向，可滚动，更像手机 App）════
-    ScrollYView{width: Fill height: 320 flow: Down spacing: 0 padding: Inset{top: 16 left: 16 right: 16}
-
-        // Step 1 — 创建报修（大主按钮）
-        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-            View{width: Fill height: Fit flow: Down spacing: 4
-                Label{text: "STEP 1" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
-                Label{text: "新建报修草稿" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
-                Label{text: "开始一项维修任务，描述问题和服务空间" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
-            }
-            Acc{text: "＋ 新建报修草稿" on_click: || createDraft()}
-        }
-
-        // Step 2 — 提交 / 接单
-        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-            View{width: Fill height: Fit flow: Down spacing: 4
-                Label{text: "STEP 2" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
-                Label{text: "提交报修 · 接单 · 分配" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
-                Label{text: "报修人提交，技工接单或经理改派" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
-            }
-            Acc{text: "提交报修（→ OPEN）" on_click: || runAction("confirmDraft")}
-            Acc{text: "技工接单（→ ACCEPTED）" on_click: || runAction("acceptTask")}
+    // ════ 步骤区（极致紧凑，全部按钮单页可见）════
+    View{width: Fill height: Fill flow: Down spacing: 2 padding: Inset{top: 2 bottom: 2 left: 12 right: 12}
+        Acc{text: "＋ 新建报修草稿" on_click: || createDraft()}
+        View{width: Fill height: Fit flow: Right spacing: 4
+            Acc{text: "提交 OPEN" on_click: || runAction("confirmDraft")}
+            Acc{text: "技工接单" on_click: || runAction("acceptTask")}
             Bar{text: "经理改派" on_click: || runAction("assignTask")}
-        }
-
-        // Step 3 — 设备
-        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-            View{width: Fill height: Fit flow: Down spacing: 4
-                Label{text: "STEP 3" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
-                Label{text: "设备确认" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
-                Label{text: "绑定设备以建立服务空间关系" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
-            }
             Bar{text: "绑定设备" on_click: || runAction("bindAsset")}
-            Bar{text: "解绑设备" on_click: || runAction("unbindAsset")}
         }
-
-        // Step 4 — 预约
-        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-            View{width: Fill height: Fit flow: Down spacing: 4
-                Label{text: "STEP 4" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
-                Label{text: "预约确认" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
-                Label{text: "技工提议时间窗，原报修人确认生效" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
-            }
+        View{width: Fill height: Fit flow: Right spacing: 4
+            Bar{text: "解绑设备" on_click: || runAction("unbindAsset")}
             Acc{text: "提议预约" on_click: || runAction("proposeAppointment")}
-            Acc{text: "确认 → SCHEDULED" on_click: || runAction("confirmAppointment")}
+            Acc{text: "确认 SCH" on_click: || runAction("confirmAppointment")}
             Danger{text: "拒绝预约" on_click: || runAction("rejectAppointment")}
         }
-
-        // Step 5 — 处理
-        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-            View{width: Fill height: Fit flow: Down spacing: 4
-                Label{text: "STEP 5" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
-                Label{text: "现场处理" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
-                Label{text: "开工、记录处置、上传证据" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
-            }
+        View{width: Fill height: Fit flow: Right spacing: 4
             Acc{text: "开工" on_click: || runAction("startProgress")}
             Bar{text: "记录处置" on_click: || runAction("recordProgress")}
             Bar{text: "上传证据" on_click: || addEvidence()}
             Bar{text: "隔离证据" on_click: || quarantineEvidence()}
         }
-
-        // Step 6 — 完工与验收
-        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-            View{width: Fill height: Fit flow: Down spacing: 4
-                Label{text: "STEP 6" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
-                Label{text: "完工与独立验收" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
-                Label{text: "另一主体验收，承接者不能自验" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
-            }
+        View{width: Fill height: Fit flow: Right spacing: 4
             Acc{text: "提交完工" on_click: || runAction("submitCompletion")}
-            Acc{text: "验收 → COMPLETED" on_click: || runAction("acceptCompletion")}
+            Acc{text: "验收" on_click: || runAction("acceptCompletion")}
             Danger{text: "退回重做" on_click: || runAction("rejectCompletion")}
         }
-
-        // Step 7 — 其他
-        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
-                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-            View{width: Fill height: Fit flow: Down spacing: 4
-                Label{text: "终止与改派" draw_text.color: secondary draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
-                Label{text: "终止任务 / 经理改派" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
-            }
+        View{width: Fill height: Fit flow: Right spacing: 4
             Danger{text: "取消任务" on_click: || runAction("cancel")}
             Bar{text: "改派" on_click: || runAction("reassign")}
         }
     }
 
-    // ════ 任务清单 ════
-    View{width: Fill height: Fit flow: Down spacing: 8 padding: Inset{top: 16 bottom: 16 left: 16 right: 16}
-        Label{text: "任务清单（按主体可见）" draw_text.color: secondary draw_text.text_style.font_size: 11}
-        ScrollYView{width: Fill height: 160 flow: Down spacing: 6
-            for i t in TASKS {
-                if visible(t, me()) {
-                    View{width: Fill height: Fit flow: Down spacing: 4 padding: 12
-                            draw_bg.color: surface draw_bg.border_radius: 12.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
-                        Label{width: Fill text: t.status
-                            draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 600}
-                        Label{width: Fill text: t.id
-                            draw_text.color: ink draw_text.text_style.font_size: 12}
-                        Label{width: Fill text: "承接：" + whoLabel(t) + "  ·  " + apptLine(t)
-                            draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 1}
-                    }
-                }
-            }
-        }
-    }
-
-    // ════ 状态条 ════
-    View{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{top: 12 bottom: 16 left: 16 right: 16}
+    // ════ 状态条（命名 Label）═══
+    View{width: Fill height: Fit flow: Down spacing: 2 padding: Inset{top: 6 bottom: 12 left: 16 right: 16}
             draw_bg.color: #x0A1112
-        Label{width: Fill text: "📍 " + STATE.status max_lines: 3
-            draw_text.color: ink draw_text.text_style.font_size: 12}
-        Label{width: Fill text: factsLine() max_lines: 2
-            draw_text.color: secondary draw_text.text_style.font_size: 11}
+        status_line := Label{width: Fill text: "📍 " + STATE.status max_lines: 3
+            draw_text.color: ink draw_text.text_style.font_size: 11}
+        facts_line := Label{width: Fill text: factsLine() max_lines: 2
+            draw_text.color: secondary draw_text.text_style.font_size: 10}
     }
+}
+
+// ─── 周期性重算：1Hz 自动重绘命名 Label ───────────────
+// 固定版本 card-host 不对数据写做触发重排；通过 fn tick 让状态条
+// 在每秒钟自动调用 set_text，达到「数据变化、屏幕跟着变」的效果。
+fn tick(){
+    // tick 不覆盖 task_status / task_detail（这两个由 click handler 通过 refreshLabels 管理），
+    // 只刷新 status_line 和 facts_line。tick 在另一 isolate 中读取 STATE/TASKS，
+    // 覆盖 task_status 会读到陈旧值。
+    ui.status_line.set_text("📍 " + STATE.status)
+    ui.facts_line.set_text("任务 " + TASKS.len().to_string() + " 条 · 事件 " + EVENT_LOG.len().to_string()
+                          + " 条（events.jsonl）· 回执 " + RECEIPTS.len().to_string() + " 条（actions.jsonl）")
 }

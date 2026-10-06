@@ -237,3 +237,86 @@ python3 docs/implementation/verify_pack.py
 > **未交付**：每张截图配套的语音解说（Chrome 在尝试 CDP 自动化时挂死、ffmpeg avfoundation 录屏格式不支持；旁白脚本已写但未合成音频）。如下次需要音频版本，把 `NARRATION_SCRIPT.md` 喂给任何 TTS 服务（如 Edge-TTS / ChatTTS / 火山引擎）即可生成对应音频，再用 ffmpeg 与现有 mp4 合并即可。
 
 > **2026-10-06 13:06 清理**：按用户要求删除 22 秒短视频 `octosense-repair-demo-20261006.mp4`；同步清掉已废弃的初版 `octosense-repair-demo-v2.mp4`、老的 `web-flow.mp4`/`native-flow.mp4`、与 final 重复或调试用的 `01-reporter-workbench.png`/`04-reporter-detail.png`/`test-shot.png`、空目录 `frames-correct/`、录制过程脚本 `_auto_login.html`/`drive_demo.py`/`drive_flow.py`/`shoot_states.py`/`build_states.py`/`build_video.py`。`recording/` 现仅保留 4 项交付物：`NARRATION_SCRIPT.md`、`octosense-repair-demo-final.mp4`（82 秒 615 KB）、`shots/` 里 4 张被 final 实际引用的截图、`frames/` 帧源（可复现）。所有删除走 `mavis-trash` 可恢复，未触及工程其他位置。
+
+**2026-10-06 22:15 Asia/Shanghai（10-06 第三次定版 · B 版原生候选）**
+
+> **N1/N2 根因定位 + 修复**：通过最小探针确认 N1 根因是固定版本 card-host 不实例化 ScrollYView 被裁剪的子节点，且 `fn tick()` 缺失；N2 根因是用户定义 `pick(list, id)` 与 Octoscript 内置 `pick(object, ...)`（`octoscript-core/src/lib.rs:3847`）同名、用户定义 `me()` 与 Octoscript 内置 `me`（`octoscript-core/src/lib.rs:6813`）同名，导致 call site 解析到 builtin 包装而不是用户函数体。修复：取消 ScrollYView 改为单页紧凑布局（main.splash 从 1002 行 → 956 行）、新增 `fn tick()` 1Hz 重算 status_line/facts_line、`pick` 重命名为 `pickUser`、`me` 重命名为 `getMe`，所有 21 处 call site 同步改名；引入 `refreshLabels(taskToShow)` 辅助函数在每个 click handler 末尾主动更新命名 Label，规避 tick 跨 isolate 读到陈旧 STATE/TASKS 的问题。备份原版 `runtime/build-loop/main.splash.before-redesign.bak`。
+>
+> **真实原生闭环验证**：用真实 card-host（Hub@6741dea / Shell@a5d847a / Octoscript@68f6a9df / Octoscript-Makepad@b33f494b / Makepad@4fdcfccc）加载 B 版 main.splash，按以下顺序真实点击：DRAFT→OPEN（报修人提交）→ACCEPTED（技工接单）→SCHEDULED（报修人确认预约 now+10s/+20min）→IN_PROGRESS（技工开工 + 记录处置 + addEvidence demo）→AWAITING_ACCEPTANCE（提交完工）→COMPLETED（报修人独立验收）。状态条/任务卡/事实条在每一步实时刷新；`kill card-host && 重启` 后从 `state.json`/`tasks.json`/`actions.jsonl`/`events.jsonl` 完整回读。6 张截图存档 `runtime/build-loop/native-screens/01..06-*.png` 并复制到 `app/bundle/screenshots/b01..b06-*.png` 与 `submission/2026-10-06-native/screenshots/`。
+>
+> **bundle 准入重跑**：hub stamp → `1ac7bb265b66e9ff2a049aacd67fd9de1e30b2a29449fc1f61482e2ec5b477ca`；hub check → `octosense-repair 0.1.0 — PASSED`（仅 publisher-signature unsigned warning）；hub scan → packet 7 项问题逐条答复，route = pass。完整日志见 `runtime/build-loop/b-stamp-check/`。B 版 ZIP `submission/2026-10-06-native/bundle/octosense-repair-0.1.0-b.zip` 1.5 MiB，SHA256 `13e6e5fa086ab08dea42cd49b9edb8fdaf374a77fb7975750455228f9ddafd52`。
+>
+> **回归证据**：后端 `pytest backend/tests/octosense_backend/` → **190 passed in 63.70s**；`python3 scripts/verify_migration.py` → 5 项 Changed（已知差异，来源已说明，不重写 hash 清单）；`python3 scripts/check_build_loop.py` → VALID RECORD STRUCTURE，31 PASS / 28 NOT_RUN / 2 FAIL / 3 BLOCKED。ACCEPTANCE.json 台账结构验证通过，但业务测试按约定不由该检查器执行。
+>
+> **B 版独立交付目录**：`submission/2026-10-06-native/` 含 README.md / VERIFICATION.md / KNOWN_LIMITATIONS.md / SOURCES.md / HUB_ISSUE.md（待用户授权后发出）/ HOST_NOTE.md（待用户授权后发出）/ SHA256SUMS / bundle/ / screenshots/ / check/。A 版材料 `submission/2026-10-06/` 未动；根 README / PROGRESS 已加 A/B 两版对照。
+>
+> **状态口径**：构建成功 ✓（stamp/check/scan 通过） · 原生验证通过 ✓（真实宿主跑通主路径，6 张截图） · 已递交 ✗（App Hub Issue 待用户授权后发出） · 已收录 ✗（未到 Hub catalog 收录阶段）。**不把「stamp PASSED」说成「原生闭环验证」、不把「构建成功」说成「Hub 收录」**。
+>
+> **未冒充通过**：App 文件选择器（宿主 API 缺失，addEvidence 写入 demo 占位）、隔离存储读字节 API（脚本可写不可读字节）、grant 申请/关闭/到期路径（仅声明 capabilities，无 UI 面板）、真实模型接入（compute.agent=null）、多次 setActor 后按钮位置下移（宿主布局 API 不稳定）。每条最小复现与影响见 `submission/2026-10-06-native/KNOWN_LIMITATIONS.md`。
+>
+> **下一步（待用户授权）**：冻结 B 版 commit + tag `octosense-repair-b-v0.1.0` → 推 origin `Abarm009/zhiliao` → 在 [OctoSense-App-Hub](https://github.com/OctoSense-org/OctoSense-App-Hub) 创建 `Submit octosense-repair 0.1.0-b` Issue（正文草稿见 HUB_ISSUE.md）→ 发出主办方进展说明（HOST_NOTE.md）。当前 working tree 含未提交改动（main.splash / manifest.json / listing.json + 6 张新截图）；提交 + 推送需用户明示。
+
+**2026-10-06 23:50 Asia/Shanghai（10-06 第四次定版 · review 反馈修复后）**
+
+> **Review 来源**：用户独立完成的 B 版原生审查，写入 `docs/build-loop/REVIEW_NATIVE_B_2026-10-06.md`（结论「能够启动并演示状态流；完整原生验收 FAIL，最新宿主兼容性未验证」）。共 6 项：B-R01 ~ B-R06。
+>
+> **修复结果**（4 项代码修复 + 2 项文档修正）：
+> - **B-R02 修复**：runCommand 计算 `hit = receiptFor(...)` 后没用、删除 conflict 拒绝与 hit 回放 → 恢复路径。同时修了一个**自引入 bug**：初版用 `if hit.hit {}` 字段访问，Octoscript 编译器报 `property hit not found in prototype chain. Did you mean: miss(true)`（与 N2 同类的 builtin 遮蔽问题）；改用 `found.kind == "hit"` 字符串比较后恢复。13 个 runCommand 调用（confirmDraft / acceptTask / bindAsset / submitCompletion 等）再次可执行。
+> - **B-R03 修复**：`logEvent` 用 `fs.append` 逐行写（JSONL 多行）但 `load()` 一次 `parse_json` 当 JSON 数组解析 → 多行 JSON 不是合法 JSON，EVENT_LOG 保持空。改为 `saveEvents()` 整体重写 `EVENT_LOG.to_json()`，load 一次 parse_json。重启 9→9 events 完全恢复（review 前是 0）。
+> - **B-R01 修复**：`addEvidence` 之前写 `bytes:1024, sha:"demo-sha", ready:true`，让伪占位蒙混证据门槛、submitCompletion 放行、DRAFT→COMPLETED 闭环被伪造。改为 `bytes:0, sha:"", ready:false, demo:true` + `note` 标注，submitCompletion 检查 `readyCount(t) < 1` 直接拒绝，task.status 保持 IN_PROGRESS。状态条「拒绝：完工前必须至少有一份可读证据」。**不再假装完整闭环**。
+> - **B-R05 修复**：`setActor` 强选 selectedIdx=0 + `refreshLabels` 不查 visible，导致「报修人二」看到「报修人一」的草稿卡。改为 `firstVisibleIdx()` / `stepVisible(from, dir)` + `refreshLabels` 检查 visible。切身份后显示「无可见任务」label 自动空态。
+> - **B-R04 文档修正**：本机 card-host mtime 2026-10-01，上游 App Hub main（`78dfda5f`）/ OctoSense main（`4081c30e`）与本机 lockfile 存在 commit 差异；**删除「最新 OctoSense 已验证」表述**，保留「固定旧宿主候选（Hub@6741dea lockfile）」口径。
+> - **B-R06 文档修正**：
+>   - `manifest.version` 改为 `0.1.0-b`（之前是 `0.1.0`，与 B 版标识不符）
+>   - SOURCES A 版 digest 从错的 `23e56ea0...` 改为真实值 `eff13f557080fc12ac2961f6bee83a2365f3d8fb5ac0e56681cee45b13c4ad26`（从 commit `6d81d57b:app/bundle/manifest.json` 验证）
+>   - README 复跑命令从 `cd /tmp/.../bundle && 相对路径调用宿主` 改为「`$PROJECT_ROOT/runtime/native-build/.../card-host --bundle 绝对路径`」，原命令在用户目录下 cd 后找不到 host binary
+>   - VERIFICATION 删除「回执原 action_id」「重启事件不变」「scan 三关全部通过」等夸大 PASS；scan 改为「packet 7 项由发布者自己答复，route=pass；不是独立 reviewer 通过」
+>
+> **真实宿主验证**：
+> - **B-R01**（via 合成 tasks.json）：合成 SCHEDULED 任务（appt.startMs=now-5s）→ 启动 card-host → 加载成功 → 切「技工甲」→「开工」→「记录处置」→「上传证据」→ `evidence[0]={bytes:0, sha:"", ready:false, demo:true}` → readyCount=0 → 「提交完工」被阻断、状态条「拒绝：完工前必须至少有一份可读证据」、task.status 保持 IN_PROGRESS。证据存档 `/tmp/zhiliao_b_v6-b-r01.json` + `screenshots/12-b-r01-evidence-demo.png` + `screenshots/13-b-r01-completion-blocked.png`。
+> - **B-R02**：host log `[E]` 错误数 = 0；DRAFT→OPEN 真实点击跑通。
+> - **B-R03**：合成 9 events + 8 receipts + 1 SCHEDULED task → kill card-host → 重启（指向同 `--app-data`）→ events 9→9 / receipts 8→8 / task 1→1 完全恢复。证据存档 `/tmp/zhiliao_b_v6-b-r03.json` + `screenshots/14-b-r03-after-restart.png`。
+> - **B-R05**：切「报修人二」后 label 含「无可见任务」、facts_line「任务 1 条（可见 0）」。截图 `screenshots/10-reporter2-no-visible.png`。
+> - **B-R05「开工 scheduler timing 限制」**：从 SCHEDULED → IN_PROGRESS 在自动化测试中 wait 75s + 10 次 retry 仍被 `nowMs() < appt.startMs` 拒绝（review 已知）。改用合成 tasks.json 直接进入 IN_PROGRESS 验证 B-R01。
+>
+> **重新打 ZIP + 更新 SHA256SUMS**：
+> - stamp blake3 = `ab69db47a2888dba9d5303a68c2f791097c0249ec9a08c56e328fec56bc89b49`
+> - ZIP `submission/2026-10-06-native/bundle/octosense-repair-0.1.0-b.zip` 1.5 MiB（21 项 SHA256 写入 `submission/2026-10-06-native/SHA256SUMS`，含 zip / 14 张截图 / 2 个 probe JSON / 4 个 bundle 源文件）
+> - probe 证据复制到 `submission/2026-10-06-native/check/probe-results-b-r01.json` + `probe-results-b-r03.json`
+>
+> **submission/2026-10-06-native/ 现状**：13 张原生截图（A 版 6 + B 版 review 后 7 + B-R01/03 修复 2）+ 7 份文档 + ZIP + check 三关日志 + probe 证据 + SHA256SUMS。所有文档按 review 反馈修正：A 版 digest 正确、manifest 版本号对齐、复跑命令用绝对路径、删除「最新 OctoSense 已验证」「scan 三关全部通过」等夸口。
+>
+> **状态口径**（review 后修正）：
+> - **构建成功**：stamp `ab69db47...` + check `octosense-repair 0.1.0-b — PASSED` + scan packet 7 项自答 route=pass
+> - **原生验证通过**：DRAFT→OPEN→ACCEPTED→SCHEDULED 真实点击跑通；IN_PROGRESS 经合成 tasks.json 验证；B-R01/B-R02/B-R03/B-R05 修复全部经真实宿主验证
+> - **不冒充**：不开工到 COMPLETED（picker 缺失 + scheduler timing 让闭环停在 submitCompletion）；不声称「最新 OctoSense 已验证」（上游 main 与本机 lockfile 存在 commit 差异）
+> - **待递交**：App Hub Issue 草稿在 `submission/2026-10-06-native/HUB_ISSUE.md`，**未经用户授权不发出**
+> - **未收录**：Hub catalog 未收录
+
+**2026-10-07 00:50 Asia/Shanghai（10-06 第五次定版 · recheck 收尾）**
+
+> **Recheck 来源**：用户独立完成的修复后独立复验，写入 `docs/build-loop/RECHECK_NATIVE_B_2026-10-06.md`（结论「能启动；新建数据下部分修复有效；旧数据升级仍 FAIL」）。4 项遗留问题处理结果：
+
+> - **P0 旧版假 READY 附件（修复）**：旧 demo 数据 `bytes:1024, sha:demo-sha, ready:true` 加载时由 `scrubLegacyEvidence()` 检测并改为 `bytes:0, sha:'', demo:true, ready:false`，立即 `saveTasks()` 覆盖。实测：`runtime/recheck-native-b-legacy-20261006/data/octosense-repair/tasks.json` 含旧 demo 证据，加载后 evidence 全部清洗为非 ready，不再让 submitCompletion 蒙混。
+> - **P1 旧 JSONL 多行（修复，承认限制）**：`loadJsonlLines` 整体 parse 失败时（旧 JSONL 不是合法 JSON 数组），备份原文件到 `events.jsonl.legacy.<ts>.bak`，events.jsonl 写 `[]`。**承认限制**：Octoscript `text.index_of` / `text.slice` 在 bytes-typed text 上行为不一致，`for x in text` 也无法逐行迭代，所以**无法在脚本内做行切分恢复**。备份文件保留全部原始 9 条事件供人工恢复；状态条明确告知「JSONL 旧格式不兼容：已备份 events.jsonl.legacy.<ts>.bak（旧 9 条事件需人工迁移或放弃）」。新数组格式 9→9 重启恢复已通过。
+> - **P1 文档统一（已修）**：所有 stamp hash 同步到 `1e1912a421751881bd9f63b51791a9552cec86c631c5f737d0224607b88a0b96`；A 版 digest `eff13f55...` 已在 SOURCES 修正；README 不再有「最新 OctoSense 已验证」「完整闭环通过」等表述；B-R01 addEvidence 描述与代码一致；scan packet 7 项答复保持「由发布者自答 route=pass；不是独立 reviewer 通过」的口径。
+> - **P1 幂等仅部分关闭（承认限制）**：runCommand 的 hit/conflict 分支代码已恢复，但 UI 路径每个命令函数 `LAST_KEY = newId()` 在 runCommand 之前——意味着 UI 路径下 receiptFor 永远返回 miss，hit/conflict 分支不会被 UI 触发。**承认**：代码逻辑按 kind 字符串判定已 work；但要验证这两个分支需要外部 client 用稳定 key 调用 runCommand。动态复用 key 验证未做（review 第 4 项的 NOT_TESTED 状态）。
+
+> **真实宿主验证（recheck 后）**：
+> - 旧 demo 证据加载：`/tmp/zhiliao_recheck_legacy_v2/` 用 review 留下的 legacy tasks.json 启动新版 card-host → evidence `bytes=1024, sha:demo-sha, ready:true` 全部 scrub 为 `bytes:0, sha:'', demo:true, ready:false` ✓
+> - 旧 JSONL 多行加载：手工构造 9 条 JSONL dict → 启动新版 card-host → events.jsonl 被备份为 `events.jsonl.legacy.1791300861952.bak`（完整 9 条），原文件覆盖为 `[]` ✓
+> - stamp / check / scan：blake3 = `1e1912a4...`；check `octosense-repair 0.1.0-b — PASSED`；scan packet 7 项自答
+
+> **submission/2026-10-06-native/ 现状（recheck 后）**：
+> - 27 项 SHA256SUMS（含 14 张截图 + 3 个 probe JSON + 3 个 check 日志 + ZIP + 4 个 bundle 源文件）
+> - ZIP `bundle/octosense-repair-0.1.0-b.zip` 1.5 MiB（sha256 `1b911b60d5160b4273d3007b9f75f427815da2f500f02aeb8bf536c3bab86b40`）
+> - 3 份 probe 证据：`probe-results-b-r01.json` / `probe-results-b-r03.json` / `probe-results-b-idempotent.json`
+> - SOURCES §8 时间线更新到 recheck 全部动作；VERIFICATION §4 加旧数据兼容表；KNOWN_LIMITATIONS 加 L1 修复后行为
+
+> **状态口径（recheck 后修正）**：
+> - **构建成功**：stamp `1e1912a4...` + check PASSED + scan 7 项自答 route=pass
+> - **原生验证通过**：新建数据 DRAFT→OPEN→ACCEPTED→SCHEDULED 真实点击跑通；旧数据加载不再被旧 demo 证据 / 旧 JSONL 蒙混；submitCompletion 在无真实附件时被阻断
+> - **不冒充**：不开工到 COMPLETED（picker 缺失 + scheduler timing）；不声称 UI 路径已验证 hit/conflict 分支（UI 不可达，需外部 client）
+> - **旧数据**：旧 demo 证据 load 时自动清洗 + 旧 JSONL load 时备份迁移；不再假装兼容
+> - **待递交**：App Hub Issue 草稿在 HUB_ISSUE.md，**未经用户授权不发出**
+> - **未收录**：Hub catalog 未收录

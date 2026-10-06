@@ -1,0 +1,9 @@
+{
+  "pre_events": 9,
+  "pre_receipts": 8,
+  "post_events": 9,
+  "post_receipts": 8,
+  "events_match": true,
+  "receipts_match": true,
+  "facts_line": "任务 1 条 · 事件 9 条（events.jsonl）· 回执 8 条（actions.jsonl）"
+}

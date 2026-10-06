@@ -1,0 +1,9 @@
+{
+  "evidence_total": 1,
+  "evidence_ready_true": 0,
+  "evidence_demo_true": 1,
+  "submit_blocked": true,
+  "final_task_status": "IN_PROGRESS",
+  "final_state_message": "拒绝：完工前必须至少有一份可读证据；请先上传或解除隔离",
+  "events_count": 9
+}
