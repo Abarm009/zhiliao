@@ -1,0 +1,90 @@
+{
+  "model": "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
+  "speaker": "Serena",
+  "language": "Chinese",
+  "instruct": "使用标准普通话，以正式、自然、克制的产品演示旁白语气讲解。咬字清晰，声调准确，语速适中，停顿简洁。不要任何方言口音，不要夸张广告腔，不要过度拖长音节。",
+  "local": true,
+  "user_selected_voice_option": 3,
+  "clips": [
+    {
+      "index": 0,
+      "text": "知了维修协作，贯通报修、处置与验收。",
+      "duration": 4.08
+    },
+    {
+      "index": 1,
+      "text": "报修、接单、完工验收，按任务推进。",
+      "duration": 5.36
+    },
+    {
+      "index": 2,
+      "text": "演示涵盖报修人、技工和项目经理。",
+      "duration": 4.56
+    },
+    {
+      "index": 3,
+      "text": "填写报修描述，选择空间与任务类别。",
+      "duration": 4.32
+    },
+    {
+      "index": 4,
+      "text": "提交报修草稿，进入待接单状态。",
+      "duration": 3.12
+    },
+    {
+      "index": 5,
+      "text": "技工查看与自身技能匹配的维修任务。",
+      "duration": 3.2
+    },
+    {
+      "index": 6,
+      "text": "技工接单后，任务进入已接单状态。",
+      "duration": 3.44
+    },
+    {
+      "index": 7,
+      "text": "绑定设备并预约，等待报修人确认。",
+      "duration": 4.72
+    },
+    {
+      "index": 8,
+      "text": "经理查看项目任务，协调维修安排。",
+      "duration": 4.4
+    },
+    {
+      "index": 9,
+      "text": "预约确认后，技工按约到场处置。",
+      "duration": 3.44
+    },
+    {
+      "index": 10,
+      "text": "提交维修证据，由报修人独立验收。",
+      "duration": 3.04
+    },
+    {
+      "index": 11,
+      "text": "验收未通过，退回重做并补充证据。",
+      "duration": 4.72
+    },
+    {
+      "index": 12,
+      "text": "验收通过后，维修任务完成。",
+      "duration": 5.52
+    },
+    {
+      "index": 13,
+      "text": "原生应用采用石墨主题与分步布局。",
+      "duration": 4.4
+    },
+    {
+      "index": 14,
+      "text": "原生入口按角色组织任务操作步骤。",
+      "duration": 3.84
+    },
+    {
+      "index": 15,
+      "text": "持续跟进，独立验收。",
+      "duration": 3.76
+    }
+  ]
+}

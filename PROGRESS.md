@@ -1,5 +1,16 @@
 # OctoSense Repair · 工程进度报告
 
+## 2026-10-06 · 普通话视频、截图与仓库更新
+
+用户选定第 3 号 Serena 温和女声。已完成 82 秒正式普通话视频及原创配乐，16 段对齐，全片解码通过；整理 7 张实际页面/原生截图、字幕、应用包和验证说明，集中于 [submission/2026-10-06](submission/2026-10-06/README.md)。根 README 更新为当前材料、运行和能力状态导航，旧业务源码与契约保留。
+
+本轮后端 190 项单测通过（62.20s），17 步独立 HTTP E2E PASS。当前截图任务通过报修人页面验收为 COMPLETED；技工阶段通过本地 API 准备。原生 bundle 目录内备份已移入 runtime 保留，重新 stamp 后 hub check PASSED（unsigned）。台账仍 31 PASS / 28 NOT_RUN / 2 FAIL / 3 BLOCKED，整体 NOT READY；迁移原始哈希检查显示 5 项既有变更，没有重写清单。GitHub 更新及远端回读另外记录，未创建 Hub Issue 或新增赛事回执。
+
+
+**截至 2026-10-06 11:50 Asia/Shanghai（10-06 定版）**
+
+> **2026-10-06 定版**：起 web 后端（8711）+ demo-web（8716），`backend/scripts/e2e_full_chain.py --base-url http://127.0.0.1:8711` 17 步 PASS（DRAFT→OPEN→ACCEPTED→bind_asset→PROPOSED→CONFIRMED/SCHEDULED→evidence READY→IN_PROGRESS→AWAITING round1→退回→AWAITING round2→COMPLETED→idempotent replay→终态开工被拒 422）。起 card-host（8728），原生 bundle 0.1.0 加载 48 个 widget（修后），第 4 个按钮（`+ 新建草稿`）实测产生真实 tasks.json / actions.jsonl / events.jsonl。证据文件 `runtime/live-20261006/recording/{octosense-repair-demo-20261006.mp4, web-flow.mp4, native-flow.mp4}`；截图 `runtime/live-20261006/recording/shots/{00-login, 01-reporter-final, 02-tech-final, 03-manager-final}.png` + `app/bundle/screenshots/{01-main, 02-after-draft}.png`。manifest blake3 已重新 stamp：`68aa7c59...`。后续 R3-08 原生 picker / on_render 仍为宿主平台缺口，已记录于 `app/docs/route-decision.md`，未伪装通过。
+
 **截至 2026-10-02 01:30 Asia/Shanghai（含 10-02 全盘 review 改判）**
 
 工程根目录：`/Users/abeam/一些尝试/知了OctoSense`
@@ -217,3 +228,12 @@ python3 docs/implementation/verify_pack.py
 ## 10. Token 用量
 
 本会话实际 Token 用量：未知（M3 路由轮次级读数未暴露）。`runtime/build-loop/iter-L2-to-L6.md` 注明此点。
+**2026-10-06 12:17 Asia/Shanghai（10-06 第二次定版 · UI 重做 + 视频）**
+
+> **UI 重做（依据时间线 12:00-12:01）**：根据"按钮堆叠难看，竖屏太丑"反馈，重写 `app/bundle/main.splash` 视图段，从横向流按钮改为纵向移动 App 范式：Hero 头部（"维修协作"大标题 + 副标题）+ 当前身份 chips 分两行（3+2）+ 当前任务卡（含 📋 标识）+ 7 个 STEP 卡纵向流（每个 STEP 一个标题 + 描述 + 一行内联按钮）+ 状态行底部。配色调整：accent `#91D5BE` → `#7DD3B0` 更鲜亮，surface `#1A2628` → `#1F2D2F` 更暖，heroBg `#23393B` 新增。按钮样式统一圆角（12-14pt），主操作高 56pt、次操作 50pt、chips 42pt。bundle 重新 stamp，blake3 `e32bec5c...`。
+
+> **完整报修流程演示视频（82 秒）**：`runtime/live-20261006/recording/octosense-repair-demo-final.mp4`（600 KB）—— 16 帧 1280×900，每帧 5-6 秒：标题卡 → 流程图 → 登录页 → 报修人工作台 → 状态机：DRAFT→OPEN → 技工列表 → 接单 → 绑设备+提议预约 → 经理视角 → 确认预约→SCHEDULED → 完工提交+独立验收 → 退回重做 → 二次验收 → 原生 bundle 启动 → 原生新建草稿 → 结束。旁白脚本见 `runtime/live-20261006/recording/NARRATION_SCRIPT.md`（含每帧解说文本与完整旁白脚本），可送任意 TTS 模型生成音频后重新合成。
+
+> **未交付**：每张截图配套的语音解说（Chrome 在尝试 CDP 自动化时挂死、ffmpeg avfoundation 录屏格式不支持；旁白脚本已写但未合成音频）。如下次需要音频版本，把 `NARRATION_SCRIPT.md` 喂给任何 TTS 服务（如 Edge-TTS / ChatTTS / 火山引擎）即可生成对应音频，再用 ffmpeg 与现有 mp4 合并即可。
+
+> **2026-10-06 13:06 清理**：按用户要求删除 22 秒短视频 `octosense-repair-demo-20261006.mp4`；同步清掉已废弃的初版 `octosense-repair-demo-v2.mp4`、老的 `web-flow.mp4`/`native-flow.mp4`、与 final 重复或调试用的 `01-reporter-workbench.png`/`04-reporter-detail.png`/`test-shot.png`、空目录 `frames-correct/`、录制过程脚本 `_auto_login.html`/`drive_demo.py`/`drive_flow.py`/`shoot_states.py`/`build_states.py`/`build_video.py`。`recording/` 现仅保留 4 项交付物：`NARRATION_SCRIPT.md`、`octosense-repair-demo-final.mp4`（82 秒 615 KB）、`shots/` 里 4 张被 final 实际引用的截图、`frames/` 帧源（可复现）。所有删除走 `mavis-trash` 可恢复，未触及工程其他位置。

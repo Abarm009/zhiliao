@@ -22,14 +22,15 @@
 //     因此"按角色隐藏按钮"这一渲染层在固定版本 card-host 上做不到；按钮统一展示，
 //     但分发由 settle() 守门。已在 app/docs/route-decision.md 记录为平台缺口。
 
-let ink = #xE2EDEA
-let secondary = #xA4B8B3
-let surface = #x1A2628
-let secondarySurface = #x2A3A3C
-let accent = #x91D5BE
-let accentText = #x132F27
-let border = #x35494A
-let danger = #xFFABA0
+let ink = #xE8F2EE
+let secondary = #x8FA5A0
+let surface = #x1F2D2F
+let secondarySurface = #x2A3D3F
+let accent = #x7DD3B0
+let accentText = #x0E2920
+let border = #x3E5A5C
+let danger = #xF2A697
+let heroBg = #x23393B
 
 let S_DRAFT = "DRAFT"
 let S_OPEN = "OPEN"
@@ -810,118 +811,192 @@ fn factsLine(){
            + " 条（events.jsonl）· 回执 " + RECEIPTS.len().to_string() + " 条（actions.jsonl）"
 }
 
+fn detailLine(){
+    // 未选中任务时 currentTask() 为 nil：直接 readyCount(nil) / nil.completions 会在
+    // 视图表达式里求值为 WrongValue，并把 "[Error:WrongValue]" 渲染到首屏。
+    let t = currentTask()
+    if t == nil { return "联系方式：（未选中任务）· 证据 0 件 · 完工轮次 0" }
+    return contactLine(t) + " · 证据 " + readyCount(t).to_string()
+           + " 件 · 完工轮次 " + t.completions.len().to_string()
+}
+
 let PROPOSAL_MS = 86400000
 
 // ─── 视图 ───────────────────────────────────────────────
-let Bar = ButtonFlat{height: 36 padding: Inset{left: 10 right: 10}
-    draw_bg +: {color: secondarySurface color_hover: #x2E4547 color_down: #x1f3233 border_size: 1.0 color_hover_border_size: 1.0 border_color: border}
-    draw_text +: {color: ink color_hover: ink color_down: secondary}}
-let Acc = ButtonFlat{height: 40 padding: Inset{left: 16 right: 16}
-    draw_bg +: {color: accent color_hover: #xA8e2cd color_down: #x7CC9B0 border_size: 0.0}
-    draw_text +: {color: accentText color_hover: accentText color_down: accentText}}
-let Danger = ButtonFlat{height: 36 padding: Inset{left: 10 right: 10}
-    draw_bg +: {color: secondarySurface color_hover: #x2E4547 color_down: #x1f3233 border_size: 1.0 color_hover_border_size: 1.0 border_color: border}
-    draw_text +: {color: danger color_hover: danger color_down: secondary}}
+let Bar = ButtonFlat{height: 50 padding: Inset{left: 18 right: 18}
+    draw_bg +: {color: #x2C4143 color_hover: #x385759 color_down: #x1c2d2e border_size: 0.0 border_radius: 12.0}
+    draw_text +: {color: ink color_hover: accent color_down: secondary}
+    draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 500}
+let Acc = ButtonFlat{height: 56 padding: Inset{left: 20 right: 20}
+    draw_bg +: {color: accent color_hover: #x94DEC0 color_down: #x6BCC9F border_size: 0.0 border_radius: 14.0}
+    draw_text +: {color: accentText color_hover: accentText color_down: accentText}
+    draw_text.text_style.font_size: 15 draw_text.text_style.font_weight: 600}
+let Danger = ButtonFlat{height: 50 padding: Inset{left: 18 right: 18}
+    draw_bg +: {color: #x3A2A2C color_hover: #x4A3539 color_down: #x2a1d20 border_size: 0.0 border_radius: 12.0}
+    draw_text +: {color: danger color_hover: danger color_down: secondary}
+    draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 500}
+let Chip = ButtonFlat{height: 42 padding: Inset{left: 14 right: 14}
+    draw_bg +: {color: heroBg color_hover: #x2D484A color_down: #x1c2d2e border_size: 0.0 border_radius: 21.0}
+    draw_text +: {color: ink color_hover: accent color_down: secondary}
+    draw_text.text_style.font_size: 12}
+let Ghost = ButtonFlat{height: 44 padding: Inset{left: 14 right: 14}
+    draw_bg +: {color: #x00000000 color_hover: #x1c2d2e color_down: #x00000000 border_size: 1.0 border_size: 1.0 color_border_color: border border_radius: 10.0}
+    draw_text +: {color: secondary color_hover: ink color_down: secondary}
+    draw_text.text_style.font_size: 12}
 
-SolidView{width: Fill height: Fill flow: Down padding: 12 spacing: 8 draw_bg.color: #x111A1B
-    Label{text: "OctoSense · 维修协作（" + STATE.actor + " · " + STATE.project + "）"
-        draw_text.color: ink draw_text.text_style.font_size: 17}
-    Label{text: "石墨主题 · 本地权威事实（tasks.json / actions.jsonl / events.jsonl）· 关闭重开后回读"
-        draw_text.color: secondary draw_text.text_style.font_size: 10}
+SolidView{width: Fill height: Fill flow: Down spacing: 0 draw_bg.color: #x0F1819
 
-    View{width: Fill height: Fit flow: Down spacing: 4
-        for u in USERS {
-            Bar{text: u.name on_click: || setActor(u.id)}
+    // ════ Hero 顶部 ════
+    View{width: Fill height: Fit flow: Down spacing: 14 padding: Inset{top: 24 bottom: 20 left: 20 right: 20}
+            draw_bg.color: #x1A2C2E
+        Label{width: Fill text: "维修协作" draw_text.color: ink draw_text.text_style.font_size: 26 draw_text.text_style.font_weight: 700}
+        Label{width: Fill text: "OctoSense Repair · 持久应用" draw_text.color: secondary draw_text.text_style.font_size: 11}
+
+        // 身份：5 个角色分两行
+        Label{width: Fill text: "切换身份" draw_text.color: secondary draw_text.text_style.font_size: 10}
+        View{width: Fill height: Fit flow: Right spacing: 8
+                Chip{text: "报修人一"  on_click: || setActor("u-reporter-1")}
+                Chip{text: "报修人二"  on_click: || setActor("u-reporter-2")}
+        }
+        View{width: Fill height: Fit flow: Right spacing: 8
+                Chip{text: "技工甲"    on_click: || setActor("u-tech-1")}
+                Chip{text: "技工乙"    on_click: || setActor("u-tech-2")}
+                Chip{text: "经理丙"    on_click: || setActor("u-manager")}
         }
     }
 
-    Acc{text: "+ 新建草稿（DRAFT）" on_click: || createDraft()}
-
-    View{width: Fill height: Fit flow: Down padding: 10 spacing: 6
-            draw_bg.color: surface draw_bg.border_radius: 12.0
-            draw_bg.border_size: 1.0 draw_bg.border_color: border
+    // ════ 当前任务卡 ════
+    View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+            draw_bg.color: surface draw_bg.border_radius: 16.0 draw_bg.border_size: 1.0 draw_bg.border_color: #x3A5557
+        Label{width: Fill text: "📋 当前任务" draw_text.color: accent draw_text.text_style.font_size: 11 draw_text.text_style.font_weight: 600}
         Label{width: Fill text: statusLine(currentTask()) max_lines: 3
-            draw_text.color: ink draw_text.text_style.font_size: 12}
-        Label{width: Fill text: contactLine(currentTask()) + " · 证据 " + readyCount(currentTask()).to_string()
-                           + " 件 · 完工轮次 " + currentTask().completions.len().to_string()
-            max_lines: 2 draw_text.color: secondary draw_text.text_style.font_size: 10}
-        View{width: Fill height: Fit flow: Right spacing: 6
-            Bar{text: "上一条" on_click: || prevTask()}
-            Bar{text: "下一条" on_click: || nextTask()}
-            Bar{text: "收藏/取消收藏" on_click: || togglePin()}
+            draw_text.color: ink draw_text.text_style.font_size: 15 draw_text.text_style.font_weight: 500}
+        Label{width: Fill text: detailLine() max_lines: 2
+            draw_text.color: secondary draw_text.text_style.font_size: 12}
+        View{width: Fill height: Fit flow: Right spacing: 8
+            Bar{text: "◀ 上一条" on_click: || prevTask()}
+            Bar{text: "下一条 ▶" on_click: || nextTask()}
+            Bar{text: "☆ 收藏" on_click: || togglePin()}
         }
     }
 
-    View{width: Fill height: Fit flow: Down padding: 10 spacing: 6
-            draw_bg.color: surface draw_bg.border_radius: 12.0
-            draw_bg.border_size: 1.0 draw_bg.border_color: border
-        View{width: Fill height: Fit flow: Right spacing: 6
-            Acc{text: "提交报修（→ OPEN）" on_click: || runAction("confirmDraft")}
-            Acc{text: "接单（→ ACCEPTED）" on_click: || runAction("acceptTask")}
-            Bar{text: "经理分配" on_click: || runAction("assignTask")}
+    // ════ 步骤区（按钮纵向，可滚动，更像手机 App）════
+    ScrollYView{width: Fill height: 320 flow: Down spacing: 0 padding: Inset{top: 16 left: 16 right: 16}
+
+        // Step 1 — 创建报修（大主按钮）
+        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+            View{width: Fill height: Fit flow: Down spacing: 4
+                Label{text: "STEP 1" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
+                Label{text: "新建报修草稿" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
+                Label{text: "开始一项维修任务，描述问题和服务空间" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
+            }
+            Acc{text: "＋ 新建报修草稿" on_click: || createDraft()}
         }
-        View{width: Fill height: Fit flow: Right spacing: 6
+
+        // Step 2 — 提交 / 接单
+        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+            View{width: Fill height: Fit flow: Down spacing: 4
+                Label{text: "STEP 2" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
+                Label{text: "提交报修 · 接单 · 分配" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
+                Label{text: "报修人提交，技工接单或经理改派" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
+            }
+            Acc{text: "提交报修（→ OPEN）" on_click: || runAction("confirmDraft")}
+            Acc{text: "技工接单（→ ACCEPTED）" on_click: || runAction("acceptTask")}
+            Bar{text: "经理改派" on_click: || runAction("assignTask")}
+        }
+
+        // Step 3 — 设备
+        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+            View{width: Fill height: Fit flow: Down spacing: 4
+                Label{text: "STEP 3" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
+                Label{text: "设备确认" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
+                Label{text: "绑定设备以建立服务空间关系" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
+            }
             Bar{text: "绑定设备" on_click: || runAction("bindAsset")}
             Bar{text: "解绑设备" on_click: || runAction("unbindAsset")}
-            Bar{text: "提议预约" on_click: || runAction("proposeAppointment")}
         }
-        View{width: Fill height: Fit flow: Right spacing: 6
-            Acc{text: "确认预约（→ SCHEDULED）" on_click: || runAction("confirmAppointment")}
+
+        // Step 4 — 预约
+        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+            View{width: Fill height: Fit flow: Down spacing: 4
+                Label{text: "STEP 4" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
+                Label{text: "预约确认" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
+                Label{text: "技工提议时间窗，原报修人确认生效" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
+            }
+            Acc{text: "提议预约" on_click: || runAction("proposeAppointment")}
+            Acc{text: "确认 → SCHEDULED" on_click: || runAction("confirmAppointment")}
             Danger{text: "拒绝预约" on_click: || runAction("rejectAppointment")}
-            Acc{text: "开工（→ IN_PROGRESS）" on_click: || runAction("startProgress")}
         }
-        View{width: Fill height: Fit flow: Right spacing: 6
+
+        // Step 5 — 处理
+        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+            View{width: Fill height: Fit flow: Down spacing: 4
+                Label{text: "STEP 5" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
+                Label{text: "现场处理" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
+                Label{text: "开工、记录处置、上传证据" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
+            }
+            Acc{text: "开工" on_click: || runAction("startProgress")}
             Bar{text: "记录处置" on_click: || runAction("recordProgress")}
             Bar{text: "上传证据" on_click: || addEvidence()}
             Bar{text: "隔离证据" on_click: || quarantineEvidence()}
         }
-        View{width: Fill height: Fit flow: Right spacing: 6
+
+        // Step 6 — 完工与验收
+        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+            View{width: Fill height: Fit flow: Down spacing: 4
+                Label{text: "STEP 6" draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
+                Label{text: "完工与独立验收" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
+                Label{text: "另一主体验收，承接者不能自验" draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 2}
+            }
             Acc{text: "提交完工" on_click: || runAction("submitCompletion")}
-            Acc{text: "验收通过（→ COMPLETED）" on_click: || runAction("acceptCompletion")}
+            Acc{text: "验收 → COMPLETED" on_click: || runAction("acceptCompletion")}
             Danger{text: "退回重做" on_click: || runAction("rejectCompletion")}
         }
-        View{width: Fill height: Fit flow: Right spacing: 6
+
+        // Step 7 — 其他
+        View{width: Fill height: Fit flow: Down spacing: 10 padding: 16
+                draw_bg.color: surface draw_bg.border_radius: 14.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+            View{width: Fill height: Fit flow: Down spacing: 4
+                Label{text: "终止与改派" draw_text.color: secondary draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 700}
+                Label{text: "终止任务 / 经理改派" draw_text.color: ink draw_text.text_style.font_size: 14 draw_text.text_style.font_weight: 600}
+            }
             Danger{text: "取消任务" on_click: || runAction("cancel")}
             Bar{text: "改派" on_click: || runAction("reassign")}
         }
     }
 
-    View{width: Fill height: Fit flow: Down padding: 10 spacing: 6
-            draw_bg.color: surface draw_bg.border_radius: 12.0
-            draw_bg.border_size: 1.0 draw_bg.border_color: border
-        Label{text: "任务清单（仅当前主体可见项）"
-            draw_text.color: secondary draw_text.text_style.font_size: 10}
-        ScrollYView{width: Fill height: 200 flow: Down spacing: 4
+    // ════ 任务清单 ════
+    View{width: Fill height: Fit flow: Down spacing: 8 padding: Inset{top: 16 bottom: 16 left: 16 right: 16}
+        Label{text: "任务清单（按主体可见）" draw_text.color: secondary draw_text.text_style.font_size: 11}
+        ScrollYView{width: Fill height: 160 flow: Down spacing: 6
             for i t in TASKS {
                 if visible(t, me()) {
-                    View{width: Fill height: Fit flow: Right spacing: 6 padding: 6
-                            draw_bg.color: secondarySurface draw_bg.border_radius: 6.0
-                        Label{width: Fill text: t.id + " · " + t.status + " · " + whoLabel(t) + " · " + apptLine(t)
-                            max_lines: 1 draw_text.color: ink draw_text.text_style.font_size: 11}
-                        Bar{text: "查看" on_click: || { STATE.selectedIdx = i; saveState() }}
+                    View{width: Fill height: Fit flow: Down spacing: 4 padding: 12
+                            draw_bg.color: surface draw_bg.border_radius: 12.0 draw_bg.border_size: 1.0 draw_bg.border_color: border
+                        Label{width: Fill text: t.status
+                            draw_text.color: accent draw_text.text_style.font_size: 10 draw_text.text_style.font_weight: 600}
+                        Label{width: Fill text: t.id
+                            draw_text.color: ink draw_text.text_style.font_size: 12}
+                        Label{width: Fill text: "承接：" + whoLabel(t) + "  ·  " + apptLine(t)
+                            draw_text.color: secondary draw_text.text_style.font_size: 11 max_lines: 1}
                     }
                 }
             }
         }
     }
 
-    View{width: Fill height: Fit flow: Down padding: 8 draw_bg.color: secondarySurface draw_bg.border_radius: 8.0
-        Label{width: Fill text: "状态：" + STATE.status max_lines: 3
-            draw_text.color: secondary draw_text.text_style.font_size: 11}
+    // ════ 状态条 ════
+    View{width: Fill height: Fit flow: Down spacing: 4 padding: Inset{top: 12 bottom: 16 left: 16 right: 16}
+            draw_bg.color: #x0A1112
+        Label{width: Fill text: "📍 " + STATE.status max_lines: 3
+            draw_text.color: ink draw_text.text_style.font_size: 12}
         Label{width: Fill text: factsLine() max_lines: 2
-            draw_text.color: secondary draw_text.text_style.font_size: 10}
+            draw_text.color: secondary draw_text.text_style.font_size: 11}
     }
 }
-
-load()
-
-// ─── 已知平台缺口（实测，见 app/docs/route-decision.md） ─────────────────
-// 固定版本 card-host（runtime/native-build/OctoSense-App-Hub/target/release/card-host，
-// manifest digest 见 runtime/repair-round2-20261002/native-check/*.log）上：
-//   1) set_visible(false) 不触发重排，隐藏控件仍占位；
-//   2) on_render 不实例化子控件，无法按白名单动态生成按钮；
-//   3) 跨声明顺序的 fn 调用、嵌套对象字面量、`ok` 变量名都会让所在函数解析为 nil，
-//      表现为 "call target is not a function (got nil)"。
-// 因此"按角色隐藏动作按钮"这一渲染层做不到；当前按钮统一展示，分发守门放在
-// runCommand()：主体可见性 + 命令源状态 + 身份矩阵 + 幂等回执，任一不过即拒绝并
-// 在 events.jsonl 留痕。要按角色隐藏按钮，需要宿主侧修复或换构建版本。

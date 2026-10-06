@@ -2,8 +2,8 @@
   "schema_version": 1,
   "created_on": "2026-09-30",
   "theme": "graphite",
-  "candidate_revision": "octosense-backend@0.4.0 · 15 表/27 命令 · 统一命令边界 authorization+idempotency+jobs",
-  "note": "2026-10-02: 全盘 review（只读 + 真机启动）后将 9 项 PASS 改判：T01→NOT_RUN（未接真实模型）、T02/T03/T05/T08/T16/T17/T18/T29→FAIL。依据 docs/build-loop/REVIEW_2026-10-02.md。现为 24 PASS / 29 NOT_RUN / 8 FAIL / 3 BLOCKED。3 项 BLOCKED 是 P06/P07/P08（外部递交，需用户授权），不是 jobs/LLM。 | 已知口径偏差：candidate_revision 写「11表/25命令」，实际 12 表 / 27 命令 / 29 应用路由；单元测试 39 项（11 核心 + 4 预约改派 + 23 扩展 + 1 dummy），不是 37。 | 代码漂移告警：commands/__init__.py mtime 2026-10-01 20:38 晚于本 ledger 最后一条 verified_at（18:10），该变更无 iteration 记录。 2026-10-02 round2：V01–V11 逐项修复，新增 141 项回归（全量 375 passed）、probe_round2.py 11/11、e2e_full_chain.py PASS。T28 已由 PASS 撤销为 FAIL（旧证据只覆盖 L0 最小应用）。check_build_loop.py 只检查记录结构，不执行应用测试。 | 2026-10-03 round3：R2-03/04/05/06/07/08/09/10 已修复（详见 docs/build-loop/REPAIR_RESULT_2026-10-03_ROUND3.md），新增 24 项 round3 回归（全量 399 passed）。R2-01/02 仍 BLOCKED 于固定宿主能力，本轮未假装通过；T28 维持 FAIL（其依赖 R2-01）。",
+  "candidate_revision": "octosense-backend@0.4.0 · 17 表/27 命令/38 路由 · 统一命令边界 authorization+idempotency+jobs · bundle hub digest cd72ded4",
+  "note": "2026-10-02: 全盘 review（只读 + 真机启动）后将 9 项 PASS 改判：T01→NOT_RUN（未接真实模型）、T02/T03/T05/T08/T16/T17/T18/T29→FAIL。依据 docs/build-loop/REVIEW_2026-10-02.md。现为 24 PASS / 29 NOT_RUN / 8 FAIL / 3 BLOCKED。3 项 BLOCKED 是 P06/P07/P08（外部递交，需用户授权），不是 jobs/LLM。 | 2026-10-02 round2：V01–V11 逐项修复，新增 141 项回归（全量 375 passed）、probe_round2.py 11/11、e2e_full_chain.py PASS。T28 已由 PASS 撤销为 FAIL。 | 2026-10-03 round3：R2-03/04/05/06/07/08/09/10 已修复，新增 24 项 round3 回归（全量 399 passed）。 | 2026-10-06 round5（docs/build-loop/REPAIR_RESULT_2026-10-06_ROUND5.md）：R5-01/02 修好 web 演示链路（预约窗口 now+2h 导致永远无法 start_progress；fetchCandidates 用 asset_id 查 asset_code），浏览器三角色全链实测到达 COMPLETED；R5-03/04 修好原生首屏 WrongValue 与按钮裁字；R5-05 修正 scripts/run_local.py 指错入口（原先启动旧 wagent_backend）；R5-06 重截随包截图并改写 listing。全量 190 passed、e2e PASS、hub check PASSED。新发现未修：原生界面完全不重绘（N1，宿主 animating/tick 均 false）与 10 个业务 handler 在 VM 内为 nil（N2），T28/T29 维持 FAIL。",
   "checks": [
     {
       "id": "G0-A",

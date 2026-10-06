@@ -1,0 +1,146 @@
+[
+  {
+    "start": 0,
+    "end": 6,
+    "text": "知了维修协作，贯通报修、处置与验收。",
+    "speech_start": 0.2,
+    "speech_end": 4.244,
+    "raw_trimmed_duration": 4.044,
+    "tempo": 1
+  },
+  {
+    "start": 6,
+    "end": 12,
+    "text": "报修、接单、完工验收，按任务推进。",
+    "speech_start": 6.2,
+    "speech_end": 11.516,
+    "raw_trimmed_duration": 5.316,
+    "tempo": 1
+  },
+  {
+    "start": 12,
+    "end": 17,
+    "text": "演示涵盖报修人、技工和项目经理。",
+    "speech_start": 12.2,
+    "speech_end": 16.722,
+    "raw_trimmed_duration": 4.522,
+    "tempo": 1
+  },
+  {
+    "start": 17,
+    "end": 22,
+    "text": "填写报修描述，选择空间与任务类别。",
+    "speech_start": 17.2,
+    "speech_end": 21.481,
+    "raw_trimmed_duration": 4.281,
+    "tempo": 1
+  },
+  {
+    "start": 22,
+    "end": 27,
+    "text": "提交报修草稿，进入待接单状态。",
+    "speech_start": 22.2,
+    "speech_end": 25.284,
+    "raw_trimmed_duration": 3.084,
+    "tempo": 1
+  },
+  {
+    "start": 27,
+    "end": 32,
+    "text": "技工查看与自身技能匹配的维修任务。",
+    "speech_start": 27.2,
+    "speech_end": 30.364,
+    "raw_trimmed_duration": 3.164,
+    "tempo": 1
+  },
+  {
+    "start": 32,
+    "end": 37,
+    "text": "技工接单后，任务进入已接单状态。",
+    "speech_start": 32.2,
+    "speech_end": 35.604,
+    "raw_trimmed_duration": 3.404,
+    "tempo": 1
+  },
+  {
+    "start": 37,
+    "end": 42,
+    "text": "绑定设备并预约，等待报修人确认。",
+    "speech_start": 37.2,
+    "speech_end": 41.744,
+    "raw_trimmed_duration": 4.683,
+    "tempo": 1.0292
+  },
+  {
+    "start": 42,
+    "end": 47,
+    "text": "经理查看项目任务，协调维修安排。",
+    "speech_start": 42.2,
+    "speech_end": 46.564,
+    "raw_trimmed_duration": 4.364,
+    "tempo": 1
+  },
+  {
+    "start": 47,
+    "end": 52,
+    "text": "预约确认后，技工按约到场处置。",
+    "speech_start": 47.2,
+    "speech_end": 50.604,
+    "raw_trimmed_duration": 3.404,
+    "tempo": 1
+  },
+  {
+    "start": 52,
+    "end": 57,
+    "text": "提交维修证据，由报修人独立验收。",
+    "speech_start": 52.2,
+    "speech_end": 55.204,
+    "raw_trimmed_duration": 3.004,
+    "tempo": 1
+  },
+  {
+    "start": 57,
+    "end": 62,
+    "text": "验收未通过，退回重做并补充证据。",
+    "speech_start": 57.2,
+    "speech_end": 61.756,
+    "raw_trimmed_duration": 4.684,
+    "tempo": 1.0294
+  },
+  {
+    "start": 62,
+    "end": 67,
+    "text": "验收通过后，维修任务完成。",
+    "speech_start": 62.2,
+    "speech_end": 66.748,
+    "raw_trimmed_duration": 5.484,
+    "tempo": 1.2052
+  },
+  {
+    "start": 67,
+    "end": 72,
+    "text": "原生应用采用石墨主题与分步布局。",
+    "speech_start": 67.2,
+    "speech_end": 71.562,
+    "raw_trimmed_duration": 4.362,
+    "tempo": 1
+  },
+  {
+    "start": 72,
+    "end": 77,
+    "text": "原生入口按角色组织任务操作步骤。",
+    "speech_start": 72.2,
+    "speech_end": 76.002,
+    "raw_trimmed_duration": 3.802,
+    "tempo": 1
+  },
+  {
+    "start": 77,
+    "end": 82,
+    "text": "持续跟进，独立验收。",
+    "speech_start": 77.2,
+    "speech_end": 80.923,
+    "raw_trimmed_duration": 3.723,
+    "tempo": 1
+  }
+]

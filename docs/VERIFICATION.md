@@ -227,3 +227,8 @@ backend/.venv/bin/python scripts/run_local.py
 ## 2026-09-26 · 四版 UI 参考
 
 新增独立 [UI参考文件夹](../design-references/2026-09-26-ui-variants/README.md)，包含四版配色、布局、按钮与本地示例交互。已核验脚本语法、四版加载、1440px文档溢出以及13项页面状态；完整范围和截图超时限制见 [参考包核验记录](../design-references/2026-09-26-ui-variants/VERIFICATION.md)。未修改业务后端，未接通正式宿主或真实服务。
+
+
+## 2026-10-06 · 比赛展示材料与源码更新
+
+本轮实际检查、视频参数、截图来源和未通过项集中记录于 [提交核验](../submission/2026-10-06/VERIFICATION.md)。190 项领域单测与 17 步独立 HTTP E2E 通过；hub check 通过（unsigned），整体 --ready 仍 NOT READY。迁移哈希检查退出 1，列出 5 个既有修复文件；没有将原始清单更新为假通过。媒体制作与项目整理不构成原生、模型或赛事收录验收。

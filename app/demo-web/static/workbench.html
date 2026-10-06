@@ -288,7 +288,7 @@
       if (role === 'TECHNICIAN' && isAssignee && status === 'ACCEPTED') {
         // 接单技工可以绑设备（assets 服务本任务的 space）
         actions.push({ kind: 'fn', label: '绑定设备（按服务关系选）', data: { fn: 'bindAssetForTech' } });
-        actions.push({ kind: 'fn', label: '提议预约（2h 后开始 1h）', data: { fn: 'proposeAppt' } });
+        actions.push({ kind: 'fn', label: '提议预约（演示：5 秒后开始）', data: { fn: 'proposeAppt' } });
       }
       if (role === 'TECHNICIAN' && isAssignee && status === 'SCHEDULED' && confirmedAppt && t.asset_id) {
         actions.push({ kind: 'act', label: '开工（→ IN_PROGRESS）', data: { kind: 'start' } });
@@ -428,8 +428,14 @@
     }
 
     async function proposeAppt() {
-      const start = Date.now() + 3600_000 * 2;
-      const end = start + 3600_000;
+      // R-P0-5b：演示夹具取窗口。两个服务端规则共同决定这个数：
+      //   1) start_progress 要求 start_at_ms <= now < end_at_ms（不满足不能开工）；
+      //   2) 提议有效期 = min(24h, 开始时间 - 现在)（appointments.py 文件头），
+      //      过期后确认返回 410 APPOINTMENT_EXPIRED。
+      // 所以「开始得太早」报修人来不及确认，「开始得太晚」技工永远不能开工。
+      // 取 25 秒：报修人有足够时间点确认，技工稍等即可开工。服务端时钟校验不变。
+      const start = Date.now() + 25_000;
+      const end = start + 20 * 60_000;
       try {
         await OctoApp.api(`/api/octosense/v1/tasks/${ACTIVE.taskId}/appointments`, {
           method: 'POST',
@@ -609,8 +615,11 @@
     }
 
     async function fetchCandidates() {
-      // 通过 /assets/match 逐个已知设备（演示夹具 3 个）
-      const known = ['as-a-1', 'as-a-2', 'as-a-3'];
+      // 通过 /assets/match 逐个已知设备。注意 /assets/match 的 code 参数是
+      // repair_assets.asset_code（AC-001 等），不是 asset_id（as-a-1）；此前用
+      // asset_id 去查，全部 ASSET_NOT_FOUND，导致绑定设备在 web 端永远候选为空
+      // → 无法 start_progress（缺 asset_id）→ web 端到不了 COMPLETED。
+      const known = ['AC-001', 'PWR-001', 'EXH-001'];
       const projectId = ACTIVE.task.project_id;
       const out = [];
       for (const code of known) {

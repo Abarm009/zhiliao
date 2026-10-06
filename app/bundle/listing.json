@@ -1,18 +1,27 @@
 {
   "schema": 1,
-  "subtitle": "围绕同一项维修的三角色协作工作台",
-  "description": "报修 → 技工接单 → 设备确认 → 预约 → 处理 → 完工 → 独立验收，按本地事实源走完整闭环。本 bundle 为 L0 最小切片，仅演示原生按钮 + 持久化回读，业务闭环见后续 L1-L6 提交材料。",
+  "subtitle": "报修、处置与独立验收的三角色维修协作",
+  "description": "围绕同一项维修，组织报修人、技工和项目经理的报修、接单、设备确认、预约、处置、完工与独立验收。原生脚本界面采用石墨主题与分步布局，应用包只声明宿主隔离存储。本地Python领域后端及Web演示已验证完整业务链；原生宿主重绘、部分动作handler与grant生命周期仍待验证修复，详见仓库提交说明。",
   "category": "productivity",
-  "keywords": ["maintenance", "collaboration", "repair"],
-  "screenshots": ["screenshots/01-main.png"],
+  "keywords": [
+    "maintenance",
+    "collaboration",
+    "repair"
+  ],
+  "screenshots": [
+    "screenshots/01-main.png",
+    "screenshots/02-after-draft.png"
+  ],
   "icon": "assets/icon.svg",
-  "platforms": ["macos"],
+  "platforms": [
+    "macos"
+  ],
   "publisher": {
     "name": "Abram / OctoSense (Local Dev)",
-    "support": "https://example.com/support",
-    "privacy_policy_url": "https://example.com/privacy"
+    "support": "https://github.com/Abarm009/zhiliao/issues",
+    "privacy_policy_url": "https://github.com/Abarm009/zhiliao/blob/main/docs/PRIVACY.md"
   },
-  "release_notes": "L0 最小切片：石墨主题 + 三按钮触发 + fs jail 持久化 + 重开回读。",
+  "release_notes": "2026-10-06候选更新：正式普通话演示视频、真实演示截图、运行说明与提交材料。后端190项单测及17步HTTP端到端链通过。原生界面展示与后端业务验证分别记录；包准入不等于原生闭环或真实模型验收。修复记录见docs/build-loop/REPAIR_RESULT_2026-10-06_ROUND5.md，提交入口见submission/2026-10-06/README.md。",
   "age_rating": "all",
   "license": "Apache-2.0"
 }

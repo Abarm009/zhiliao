@@ -1,0 +1,57 @@
+{
+  "file": "video/zhiliao-demo-putonghua.mp4",
+  "source_sha256": "c3b0eccb7a287c56f92a21925a852233d44bb00bbf76e3d9822b82b164194832",
+  "output_sha256": "91554d02a447afeb815f65b70c5bb5f88b5bea112a104a27b35236ac39ed8881",
+  "duration": 82.0,
+  "size_bytes": 2636409,
+  "video_packets_unchanged": true,
+  "full_decode": "PASS",
+  "loudness": {
+    "input_i": "-16.67",
+    "input_tp": "-4.50",
+    "input_lra": "5.70",
+    "input_thresh": "-27.89",
+    "output_i": "-15.62",
+    "output_tp": "-3.30",
+    "output_lra": "5.20",
+    "output_thresh": "-26.83",
+    "normalization_type": "dynamic",
+    "target_offset": "-0.38"
+  },
+  "scene_narration_rms_dbfs": [
+    -19.09,
+    -19.23,
+    -17.33,
+    -17.14,
+    -19.1,
+    -19.84,
+    -19.46,
+    -16.45,
+    -17.85,
+    -16.8,
+    -19.17,
+    -15.96,
+    -18.75,
+    -14.67,
+    -16.85,
+    -19.71
+  ],
+  "streams": [
+    {
+      "type": "video",
+      "codec": "h264",
+      "sample_rate": null,
+      "channels": null,
+      "width": 1280,
+      "height": 900
+    },
+    {
+      "type": "audio",
+      "codec": "aac",
+      "sample_rate": "48000",
+      "channels": 2,
+      "width": null,
+      "height": null
+    }
+  ]
+}
