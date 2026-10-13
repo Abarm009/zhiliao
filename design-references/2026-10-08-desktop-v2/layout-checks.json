@@ -1,0 +1,46 @@
+[
+  {
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1440,
+    "noHorizontalOverflow": true,
+    "actionPosition": "row",
+    "headerHeight": 38
+  },
+  {
+    "width": 1280,
+    "height": 800,
+    "scrollWidth": 1280,
+    "noHorizontalOverflow": true,
+    "actionPosition": "row",
+    "headerHeight": 38
+  },
+  {
+    "width": 980,
+    "height": 760,
+    "scrollWidth": 965,
+    "noHorizontalOverflow": true,
+    "actionPosition": "column",
+    "headerHeight": 38
+  },
+  {
+    "width": 760,
+    "height": 900,
+    "scrollWidth": 745,
+    "noHorizontalOverflow": true,
+    "actionPosition": "column",
+    "headerHeight": 68
+  },
+  {
+    "width": 390,
+    "height": 844,
+    "scrollWidth": 375,
+    "noHorizontalOverflow": true,
+    "actionPosition": "column",
+    "headerHeight": 68
+  },
+  {
+    "check": "窄窗列表选择后返回详情",
+    "pass": true
+  }
+]

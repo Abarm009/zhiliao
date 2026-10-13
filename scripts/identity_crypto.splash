@@ -1,0 +1,116 @@
+// IDENTITY_CRYPTO_BEGIN — pure Splash SHA-256 / HMAC / PBKDF2, no FNV authentication.
+// Only 256-bit random hex tokens are accepted. Never use this for human passwords.
+let AUTH_ROUNDS = 4096
+let AUTH_K = [1116352408,1899447441,3049323471,3921009573,961987163,1508970993,2453635748,2870763221,
+ 3624381080,310598401,607225278,1426881987,1925078388,2162078206,2614888103,3248222580,
+ 3835390401,4022224774,264347078,604807628,770255983,1249150122,1555081692,1996064986,
+ 2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,113926993,338241895,
+ 666307205,773529912,1294757372,1396182291,1695183700,1986661051,2177026350,2456956037,
+ 2730485921,2820302411,3259730800,3345764771,3516065817,3600352804,4094571909,275423344,
+ 430227734,506948616,659060556,883997877,958139571,1322822218,1537002063,1747873779,
+ 1955562222,2024104815,2227730452,2361852424,2428436474,2756734187,3204031479,3329325298]
+fn authRor(x, n){ return (x >> n) | ((x & ((1 << n)-1)) << (32-n)) }
+fn authSha(bytes){
+    let b = []
+    for x in bytes { b.push(x) }
+    let bits = b.len() * 8
+    b.push(128)
+    while (b.len() % 64) != 56 { b.push(0) }
+    for i in 0..4 { b.push(0) }
+    b.push((bits >> 24) & 255); b.push((bits >> 16) & 255)
+    b.push((bits >> 8) & 255); b.push(bits & 255)
+    let h = [1779033703,3144134277,1013904242,2773480762,1359893119,2600822924,528734635,1541459225]
+    let pos = 0
+    while pos < b.len() {
+        let w = []
+        for i in 0..16 {
+            let p = pos + i*4
+            w.push(((b[p]<<24) | (b[p+1]<<16) | (b[p+2]<<8) | b[p+3]) & 4294967295)
+        }
+        for i in 16..64 {
+            let x = w[i-15]; let y = w[i-2]
+            let s0 = authRor(x,7) ^ authRor(x,18) ^ (x>>3)
+            let s1 = authRor(y,17) ^ authRor(y,19) ^ (y>>10)
+            w.push((w[i-16] + s0 + w[i-7] + s1) & 4294967295)
+        }
+        let a=h[0]; let c1=h[1]; let c=h[2]; let d=h[3]
+        let e=h[4]; let f=h[5]; let g=h[6]; let hh=h[7]
+        for i in 0..64 {
+            let s1=authRor(e,6)^authRor(e,11)^authRor(e,25)
+            let ch=(e&f)^((e^4294967295)&g)
+            let t1=(hh+s1+ch+AUTH_K[i]+w[i])&4294967295
+            let s0=authRor(a,2)^authRor(a,13)^authRor(a,22)
+            let maj=(a&c1)^(a&c)^(c1&c)
+            let t2=(s0+maj)&4294967295
+            hh=g; g=f; f=e; e=(d+t1)&4294967295
+            d=c; c=c1; c1=a; a=(t1+t2)&4294967295
+        }
+        h[0]=(h[0]+a)&4294967295; h[1]=(h[1]+c1)&4294967295
+        h[2]=(h[2]+c)&4294967295; h[3]=(h[3]+d)&4294967295
+        h[4]=(h[4]+e)&4294967295; h[5]=(h[5]+f)&4294967295
+        h[6]=(h[6]+g)&4294967295; h[7]=(h[7]+hh)&4294967295
+        pos=pos+64
+    }
+    let out=[]
+    for x in h {
+        out.push((x>>24)&255); out.push((x>>16)&255)
+        out.push((x>>8)&255); out.push(x&255)
+    }
+    return out
+}
+fn authHex(bytes){
+    let digits=["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"]; let out=""
+    for x in bytes {
+        let hi=(x>>4)&15; let lo=x&15
+        out=out+digits[hi]+digits[lo]
+    }
+    return out
+}
+fn authNibble(c){
+    if c >= 48 && c <= 57 { return c-48 }
+    if c >= 97 && c <= 102 { return c-87 }
+    return -1
+}
+fn authUnhex(s, size){
+    if s == nil { return nil }
+    let bytes=s.to_bytes()
+    if bytes.len() != size*2 { return nil }
+    let out=[]
+    for i in 0..size {
+        let hi=authNibble(bytes[i*2]); let lo=authNibble(bytes[i*2+1])
+        if hi < 0 || lo < 0 { return nil }
+        out.push(hi*16+lo)
+    }
+    return out
+}
+fn authHmac(key, bytes){
+    let inside=[]; let outside=[]
+    for i in 0..64 {
+        let k=0
+        if i < key.len() { k=key[i] }
+        inside.push(k^54); outside.push(k^92)
+    }
+    for x in bytes { inside.push(x) }
+    let digest=authSha(inside)
+    for x in digest { outside.push(x) }
+    return authSha(outside)
+}
+fn authKdfStart(token, salt){
+    let key=authUnhex(token,32); let b=authUnhex(salt,16)
+    if key == nil || b == nil { return nil }
+    b.push(0); b.push(0); b.push(0); b.push(1)
+    let u=authHmac(key,b); let t=[]
+    for x in u { t.push(x) }
+    return {key:key, u:u, t:t, round:1}
+}
+fn authKdfRound(job){
+    job.u=authHmac(job.key,job.u)
+    for i in 0..32 { job.t[i]=job.t[i]^job.u[i] }
+    job.round=job.round+1
+}
+fn authEqual(a,b){
+    let diff=0
+    for i in 0..32 { diff=diff | (a[i]^b[i]) }
+    return diff == 0
+}
+// IDENTITY_CRYPTO_END

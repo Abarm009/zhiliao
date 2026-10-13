@@ -2,7 +2,9 @@
 
 > **2026-10-06 当前入口**：运行与最新结果见 [根 README](../README.md) 和 [本次提交材料](../submission/2026-10-06/README.md)。下文主要为 10-01/10-02 历史实现及审查记录，不能用旧测试数字或旧截图判断当前版本。原生闭环仍未通过；本地 Web/后端验证与原生展示分别记录。
 
-> 石墨主题 Hub 脚本应用 + L2-L6 扩展后端。报修 → 技工接单 → 设备确认 → 预约 → 处理 → 完工 → 独立验收 → 退回重做，沿本地事实源走完整闭环。
+> **2026-10-14 M7 当前桌面发布候选（本地 staging，仅在隔离沙箱中可重现）**：**0.1.0-i**，见 [M7 r10 staging](../../runtime/optimization/2026-10-09/M7/r10/release/octosense-repair-0.1.0-i/)（上方旧 r4/r2 路径为历史候选，勿再引用）。stamp blake3 由 hub CLI 实时计算并写入 `INTEGRITY.txt`（位于 `release/release-materials/`）；LICENSE/PRIVACY/SOURCES 在 bundle 外的 release-materials/。当前目标宿主 = **rc.6**（`runtime/optimization/2026-10-09/host-rc6/app-extracted/OctoSense.app`，哈希见 `host-rc6/sha256.txt`；2026-10-13 16:45 前的 M0/r3 rc.1 宿主仅为历史定位）。最新独立 Review 结论见 [M7_REVIEW_r13](../docs/optimization/2026-10-09-desktop/reports/M7_REVIEW_r13.md)：**BLOCKED**——R-M7-02 严格 JSON 加载反例已闭合，但认证后恢复链、同 Store 原生业务进程重开、精确写点故障缺 harness 控制证据；正常/退回/真实模型完整链 NOT_RUN。不发布、不递交、不上架。
+
+> 石墨主题 Hub 脚本应用 + L2-L6 扩展后端。设计流程：报修 → 技工接单 → 设备确认 → 预约 → 处理 → 完工 → 独立验收 → 退回重做，沿本地事实源走完整闭环。**注意**：该完整闭环仅在历史 Web/后端层实证过；当前原生候选 0.1.0-i 的完整业务链尚未实证（M7_REVIEW_r13：正常/退回链 NOT_RUN），不能用本段表述判断当前原生版本状态。
 
 ## 这是什么
 
@@ -43,15 +45,61 @@ backend/.venv/bin/python -m uvicorn --app-dir backend/src \
   octosense_backend.api:make_app --factory --host 127.0.0.1 --port 8712
 #   （如果不想用环境变量，make_app() 默认 db 路径 = runtime/octosense.db）
 
-# 3) 跑原生脚本应用（card-host，端口 8155）
-MAKEPAD_REMOTE=8155 \
-runtime/native-build/OctoSense-App-Hub/target/release/card-host \
-  --bundle app/bundle --app-data /tmp/octosense-appdata --allow-unsigned --stamp
+# (历史) 启动 — 卡片宿主 card-host 路径
+#
+# M7 r3 起桌面发布候选已迁移到 `OctoSense.app`（r3 提取 /
+# `runtime/optimization/2026-10-09/M0/r3/host/app-extracted/`）。
+# card-host 路径保留为 10-08 提交对应的 legacy 入口，
+# 仅在 P06P07P08 外部递交流程中作为历史参考保留，不是当前目标宿主。
+#
+# 旧命令（2026-10-06 提交时使用；不再启动）：
+#
+#   MAKEPAD_REMOTE=8155 \
+#   runtime/native-build/OctoSense-App-Hub/target/release/card-host \
+#     --bundle app/bundle --app-data /tmp/octosense-appdata \
+#     --allow-unsigned --stamp
+#
+# 历史遗留：splash 验证用 `curl http://127.0.0.1:8155/snap` 与
+# `curl http://127.0.0.1:8155/g?raw=1`，留给 archival purposes only。
 
-# 4) 验证（card-host 已启动后）
-curl -sS http://127.0.0.1:8155/snap | jq .
-curl -sS "http://127.0.0.1:8155/g?raw=1" -o /tmp/initial.png
+### M7 r4 本地发布候选（staging + 桌面启动实测）
+
+不替代 0.1.0-b 已递交候选；用于同版本号不同字节差异时的本地复检与 hub stamp 验证。
+本节实测命令已按 B-M7-01 审查意见回到当前解阻路径（直接 subprocess + try/finally），旧 card-host + `/tmp/octosense-appdata` 段落一律不再启动。
+
+```sh
+# 隔离 staging：只能在自己的隔离目录运行；不复写工作区 app/bundle
+python3 runtime/optimization/2026-10-09/M7/r2/scripts/m7_review_driver.py
+
+# 沙箱内 hub stamp + 私钥 try/finally 销毁
+python3 runtime/optimization/2026-10-09/M7/r2/scripts/m7_sandbox_sign.py
+
+# 静态 acceptance（M7R2-NN 自有编号；原 64 项含义保留）
+python3 runtime/optimization/2026-10-09/M7/r2/scripts/m7_acceptance_run.py
+
+# A-M7-03 重冻结后材料自指纹重核 + 篡改测试
+python3 runtime/optimization/2026-10-09/M7/r4/scripts/m7_rehash.py
+python3 runtime/optimization/2026-10-09/M7/r4/scripts/m7_rehash_tamper_test.py
+
+# B-M7-01 驱动控制流反例（内存 mock，不启动宿主）：3/3 PASS
+python3 runtime/optimization/2026-10-09/M7/r4/scripts/m7_driver_injection.py
 ```
+
+桌面启动实测（B-M7-01 r4 修复版：直接 subprocess + 隔离 + try/finally）：
+
+```sh
+# 直接 subprocess（strict sandbox-exec 当前 Metal panic，未冒充 PASS）。
+# 所有写入重定向到 M7/r4/sandbox/；HOME/TMPDIR/CFFIXED_USER_HOME/
+# XDG data/config/cache 全在隔离根。
+python3 runtime/optimization/2026-10-09/M7/r4/scripts/m7_launcher_probe.py \
+  --bundle runtime/optimization/2026-10-09/M7/r2/release/octosense-repair-0.1.0-c \
+  --label probe-direct --wall-cap 4.0 --post-term-cap 2.0
+# 证据：runtime/optimization/2026-10-09/M7/r4/launch-logs/probe-direct*/run.json
+# 3/3 OK：wall ≈ 4.0s；TERM-after ≤ 23ms；proc_rc=0；post_pgrep_rc=1；residue_clean=true
+# 注入测试：m7_driver_injection.py 三个反例 + clean baseline 通过
+```
+
+P06（递交）/P07（收录）/P08（赛事回执）保持 UNASSESSED；本轮不自动发出、不 push、不上架、不配置真实 provider。
 
 ### 端到端复跑（curl）
 
@@ -106,3 +154,6 @@ bash backend/scripts/e2e_full_chain.sh
 ## 递交材料
 
 详见 `docs/build-loop/SUBMISSION.md` 与 `app/build/review.json`（hub scan 输出）。
+# 2026-10-10 五账号身份子范围
+
+真实账号表和初始凭据仅在项目 `runtime/identity/`，不随 bundle 分发。演示 identities/USERS 已退出授权路径；新会话未登录时失败关闭。当前 launcher 安全登录未接通，完整源码/包及原生隔离仍有阻塞，不能将五账号创建或无窗口 VM 测试视为应用原生可用。安装、同步、验证与限制见 [M2 五账号记录](../docs/optimization/2026-10-09-desktop/reports/M2_ACCOUNTS_SOL_2026-10-10.md)。

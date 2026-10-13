@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-08T05:09:05.260Z",
+  "scope": "design prototype only; actual browser pointer/selector actions",
+  "checks": [
+    {
+      "name": "预约确认后更新本页示例状态",
+      "pass": true
+    },
+    {
+      "name": "无真实证据时提交完工禁用",
+      "pass": true
+    },
+    {
+      "name": "空进度显示错误并保持表单",
+      "pass": true
+    },
+    {
+      "name": "保存进度进入同一任务记录",
+      "pass": true
+    },
+    {
+      "name": "退回原因必填",
+      "pass": true
+    },
+    {
+      "name": "退回进入维修中且保留旧完工与原因",
+      "pass": true
+    },
+    {
+      "name": "独立验收需两个确认项",
+      "pass": true
+    },
+    {
+      "name": "验收完成终态只读",
+      "pass": true
+    },
+    {
+      "name": "维修人员不能验收自己的完工",
+      "pass": true
+    },
+    {
+      "name": "跨项目身份无任务泄漏",
+      "pass": true
+    },
+    {
+      "name": "搜索无结果可清空",
+      "pass": true
+    },
+    {
+      "name": "收藏按当前身份筛选",
+      "pass": true
+    },
+    {
+      "name": "报修问题必填",
+      "pass": true
+    },
+    {
+      "name": "新建保存草稿而非假业务提交",
+      "pass": true
+    },
+    {
+      "name": "草稿可演示提交进入待接单",
+      "pass": true
+    }
+  ]
+}

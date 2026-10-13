@@ -1,4 +1,6 @@
-# App Hub Issue 草稿（待用户授权后发出）
+# App Hub Issue 历史草稿（实际已递交 #149）
+
+> **2026-10-08：用户已授权提交，官方 [Issue #149](https://github.com/OctoSense-org/OctoSense-App-Hub/issues/149) 已通过 submit-app.yml 网页表单创建并回读。** 实际正文见 [SUBMITTED_ISSUE.md](../2026-10-08-hub/SUBMITTED_ISSUE.md)，证据见 [RECEIPT.md](../2026-10-08-hub/RECEIPT.md)。下文保留为历史草稿，其中授权待定、tag待冻结和完整闭环等表述不代表当前状态；当前为已递交候选，待维护者反馈，未审核通过或收录。
 
 > 任务书：「冻结 B 版源码 commit 和 tag，上传到现有公开仓库，再到官方 App Hub 创建或更新对应的 `Submit octosense-repair <version>` Issue」。本文档是 Issue 正文草稿，**未经用户明确授权前不会自动发出**。
 >

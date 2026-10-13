@@ -1,10 +1,17 @@
 {
   "capabilities": [
-    "storage"
+    "storage",
+    "net"
   ],
+  "network": {
+    "hosts": [
+      "api.minimax.cn",
+      "127.0.0.1"
+    ]
+  },
   "id": "octosense-repair",
   "integrity": {
-    "bundle_blake3": "e5b477c73bbee2b7a779661c6845d061e8ec53ff46d9b75dd47435702da16579"
+    "bundle_blake3": "8eab167de9bb471457241ef48deb0f5e430c35669efead501531d978c507abf9"
   },
   "name": "OctoSense Repair",
   "schema": 1,

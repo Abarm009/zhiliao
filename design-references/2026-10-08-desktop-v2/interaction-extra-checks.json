@@ -1,0 +1,33 @@
+{
+  "scope": "design prototype only",
+  "checks": [
+    {
+      "name": "快捷键聚焦搜索",
+      "pass": true
+    },
+    {
+      "name": "键盘切换页签并保留焦点",
+      "pass": true
+    },
+    {
+      "name": "放弃关闭后保留未保存输入",
+      "pass": true
+    },
+    {
+      "name": "确认放弃才关闭表单",
+      "pass": true
+    },
+    {
+      "name": "管理员代验收理由必填",
+      "pass": true
+    },
+    {
+      "name": "代验收理由进入处理记录",
+      "pass": true
+    },
+    {
+      "name": "代验收记录保留输入理由",
+      "pass": true
+    }
+  ]
+}

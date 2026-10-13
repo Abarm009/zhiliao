@@ -36,3 +36,22 @@ build/
 # Local probes and editor scratch state; keep them out of source submissions
 /:memory:.ses
 /app/demo-web/static/_*.html
+
+# 2026-10-14 复赛冻结：敏感与大体积/本地产物
+runtime/secrets/
+runtime/identity/CREDENTIALS_FOR_ABRAM.md
+**/CREDENTIALS*.md
+**/*.env
+**/*.bak
+**/*.bak-*
+**/*.bak[0-9]*
+**/*.log
+host-rc6/
+**/host-rc6/
+**/*.dmg
+app/bundle/.archive/
+app/bundle/data-test/
+app/bundle/identities.json
+app/bundle/instance.json
+/知了OctoSense_演示_v1.mp4
+/知了OctoSense_演示_v2_partial.mp4

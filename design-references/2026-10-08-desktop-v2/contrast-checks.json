@@ -1,0 +1,44 @@
+[
+  {
+    "pair": "正文/背景",
+    "fg": "#E2EDEA",
+    "bg": "#111A1B",
+    "ratio": 14.77,
+    "normal_text_4_5": true
+  },
+  {
+    "pair": "次级文字/表面",
+    "fg": "#A4B8B3",
+    "bg": "#1A2628",
+    "ratio": 7.46,
+    "normal_text_4_5": true
+  },
+  {
+    "pair": "次级文字/次级表面",
+    "fg": "#A4B8B3",
+    "bg": "#223638",
+    "ratio": 6.1,
+    "normal_text_4_5": true
+  },
+  {
+    "pair": "主按钮文字/主按钮",
+    "fg": "#132F27",
+    "bg": "#91D5BE",
+    "ratio": 8.52,
+    "normal_text_4_5": true
+  },
+  {
+    "pair": "注意文字/注意背景",
+    "fg": "#EBCB8B",
+    "bg": "#332F24",
+    "ratio": 8.55,
+    "normal_text_4_5": true
+  },
+  {
+    "pair": "错误文字/表面",
+    "fg": "#FFABA0",
+    "bg": "#1A2628",
+    "ratio": 8.57,
+    "normal_text_4_5": true
+  }
+]

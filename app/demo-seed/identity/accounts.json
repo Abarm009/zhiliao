@@ -1,0 +1,114 @@
+{
+  "schema": 2,
+  "registry_kind": "local_accounts",
+  "created_at": 1791645440394,
+  "accounts": [
+    {
+      "id": "u-reporter-1",
+      "name": "报修人一",
+      "roles": {
+        "prj-A": [
+          "REPORTER"
+        ]
+      },
+      "skills": [],
+      "enabled": true,
+      "revoked_at": 0,
+      "expires_at": 1823181440394,
+      "credential_epoch": 1,
+      "kdf": {
+        "scheme": "pbkdf2-sha256-token-v1",
+        "iterations": 4096,
+        "salt": "eb8adcb74bf2fd1187a23cca0c2e6e8c",
+        "hash": "b115d8b268582626b9410f02171f8d9d8f79667c18c4b8d2f47c05c86aeb7b7e"
+      }
+    },
+    {
+      "id": "u-reporter-2",
+      "name": "报修人二",
+      "roles": {
+        "prj-B": [
+          "REPORTER"
+        ]
+      },
+      "skills": [],
+      "enabled": true,
+      "revoked_at": 0,
+      "expires_at": 1823181440394,
+      "credential_epoch": 1,
+      "kdf": {
+        "scheme": "pbkdf2-sha256-token-v1",
+        "iterations": 4096,
+        "salt": "3c2e5f11e0534c1a45d7acd48a051818",
+        "hash": "800cef6519c96a851f4126d44e1ba889b9c0d76d3e09f57e78703374b2666f65"
+      }
+    },
+    {
+      "id": "u-tech-1",
+      "name": "技工甲（HVAC）",
+      "roles": {
+        "prj-A": [
+          "TECHNICIAN"
+        ]
+      },
+      "skills": [
+        "HVAC"
+      ],
+      "enabled": true,
+      "revoked_at": 0,
+      "expires_at": 1823181440394,
+      "credential_epoch": 1,
+      "kdf": {
+        "scheme": "pbkdf2-sha256-token-v1",
+        "iterations": 4096,
+        "salt": "f76364321b6f9c643802a0c07648cc8e",
+        "hash": "8862c9bce8e4d489c23366315be72a8227e1cd59110fa0675018c19f4ea00fd0"
+      }
+    },
+    {
+      "id": "u-tech-2",
+      "name": "技工乙（电气）",
+      "roles": {
+        "prj-A": [
+          "TECHNICIAN"
+        ],
+        "prj-B": [
+          "TECHNICIAN"
+        ]
+      },
+      "skills": [
+        "ELECTRICAL"
+      ],
+      "enabled": true,
+      "revoked_at": 0,
+      "expires_at": 1823181440394,
+      "credential_epoch": 1,
+      "kdf": {
+        "scheme": "pbkdf2-sha256-token-v1",
+        "iterations": 4096,
+        "salt": "23894fce5f0c9c5626b501b7222d86eb",
+        "hash": "73f313ccfca815340420ee9914a2d19a75d9aaa64f631b5ee4e83eee543d3c96"
+      }
+    },
+    {
+      "id": "u-manager",
+      "name": "经理丙",
+      "roles": {
+        "prj-A": [
+          "MANAGER"
+        ]
+      },
+      "skills": [],
+      "enabled": true,
+      "revoked_at": 0,
+      "expires_at": 1823181440394,
+      "credential_epoch": 1,
+      "kdf": {
+        "scheme": "pbkdf2-sha256-token-v1",
+        "iterations": 4096,
+        "salt": "16747328c618d57eb6a939d2c29a2c02",
+        "hash": "4d9b274ea03035bb51b0f8d01ac5a654ed0031ae3aaef16013dbfcebf82a86e9"
+      }
+    }
+  ]
+}

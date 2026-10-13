@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "module": "M3",
+  "kind": "model_configuration",
+  "note": "M3 真实模型 provider = MiniMax（Abram 2026-10-10 授权）。本文件不存密钥；密钥在 runtime/secrets/minimax_provider.env（已 gitignore、600 权限），由宿主/适配层注入。",
+  "enabled": true,
+  "provider_id": "minimax",
+  "model_id": "MiniMax-M3",
+  "host_label": "minimax-cn",
+  "timeout_ms": 8000,
+  "max_alternatives": 3,
+  "allowed_categories": [
+    "HVAC_NOT_COOLING",
+    "ELECTRICAL",
+    ""
+  ],
+  "forbidden_model_write_verbs": [
+    "createDraft",
+    "confirmDraft",
+    "bindAsset",
+    "unbindAsset",
+    "acceptTask",
+    "assignTask",
+    "cancelTask",
+    "reassign",
+    "submitCompletion",
+    "acceptCompletion",
+    "rejectCompletion",
+    "setActor"
+  ],
+  "audit_keys": [
+    "request_id",
+    "provider_id",
+    "model_id",
+    "host_label",
+    "raw_text_length",
+    "raw_text_hash",
+    "result_kind",
+    "elapsed_ms"
+  ],
+  "versioning": {
+    "raw_input_version_increments": "user edit / reset",
+    "draft_version_increments": "apply AI OR user edit",
+    "task_version_checked_only_after_task_exists": true,
+    "expires_at_ms_based_on_timeout_ms_plus_3000": true
+  },
+  "endpoint": "https://api.minimax.cn/anthropic/v1/messages",
+  "api_style": "anthropic-messages",
+  "secret_ref": "runtime/secrets/minimax_provider.env#MINIMAX_API_KEY",
+  "authorized_by": "Abram 2026-10-10 23:04 语音授权（provider=MiniMax）"
+}

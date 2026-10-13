@@ -232,3 +232,8 @@ backend/.venv/bin/python scripts/run_local.py
 ## 2026-10-06 · 比赛展示材料与源码更新
 
 本轮实际检查、视频参数、截图来源和未通过项集中记录于 [提交核验](../submission/2026-10-06/VERIFICATION.md)。190 项领域单测与 17 步独立 HTTP E2E 通过；hub check 通过（unsigned），整体 --ready 仍 NOT READY。迁移哈希检查退出 1，列出 5 个既有修复文件；没有将原始清单更新为假通过。媒体制作与项目整理不构成原生、模型或赛事收录验收。
+# 2026-10-10 · 五账号身份子范围验证
+
+五个独立随机令牌账号已创建，账号/哈希与权限 600 的唯一初始凭据文件仅在 `runtime/identity/`。实际 Splash 认证/授权函数和本地宿主 jailed fs 的无窗口 VM 运行验证五个角色夹具登录；A/B 撤权、到期、移项目、篡改 state、错令牌和旧回执拒绝均通过，隔离任务/回执/事件前后哈希一致。这不是 launcher 原生端到端验收。
+
+原生登录入口未接通，强制隔离预检失败，完整 KDF 超出默认累计指令预算；完整主文件解析和 Hub check 仍未通过。M2 保持 BLOCKED，无 PASS；既有 38 业务/12 UI/P0 验收保留。详细范围和复现见 [五账号实施记录](optimization/2026-10-09-desktop/reports/M2_ACCOUNTS_SOL_2026-10-10.md)。

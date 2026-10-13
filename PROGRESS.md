@@ -344,3 +344,12 @@ python3 docs/implementation/verify_pack.py
 > - **不冒充**：不开工到 COMPLETED（picker 缺失 + scheduler timing）；不声称 UI 路径已验证 hit/conflict 分支（UI 不可达）；不声称「最新 OctoSense 已验证」；scan 7 项由发布者自答，不是独立 reviewer 通过
 > - **待递交**：App Hub Issue 草稿在 HUB_ISSUE.md，**未经用户授权不发出**
 > - **未收录**：Hub catalog 未收录
+
+**2026-10-08 · 桌面交互 v2 设计参考（尚未实施原生 UI）**
+
+- 新增 `design-references/2026-10-08-desktop-v2/`：沿用用户选择的 04-graphite，提供可点击的任务列表、详情、下一步操作区，以及预约、维修进度、独立验收与窄窗参考图。
+- 交付 DESIGN_SPEC、BUILD_PROMPT、VIDEO_RESHOOT、VERIFICATION；现有 UI 规格新增设计参考入口，不改变既有业务权限、状态机或 P0 / 38 项业务 / 12 项 UI 验收。
+- 本机浏览器原型 15 项流程与 7 项补充交互检查通过；五种视口无横向溢出、窄窗列表选择可用；六对主要文字色对比度超过 4.5:1。原始检查结果随设计包保存，只证明设计原型。
+- 本轮未修改 `app/bundle/main.splash`、backend 或旧 WAgent；未把设计占位附件计为真实证据。真实原生 UI、最新宿主兼容性、附件链路和完整独立验收需构建模型实施并复验。
+- 视频抽查发现第 50 秒文字页替代操作、第 74 秒原生画面放大裁切，新增约 84 秒重拍分镜，保留用户选定的普通话 Serena 第 3 版；新比赛视频尚未录制，旧视频保留。
+- 尚未提交本轮设计材料到 GitHub；本轮用户要求先给构建模型参考。工作期间另有 `submission/2026-10-08-hub/` 出现，不属于本轮设计文件，不改动该目录。

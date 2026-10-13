@@ -1,0 +1,176 @@
+// IDENTITY_AUTH_BEGIN — account authority at /identity/accounts.json in host jail.
+// SESSION and AUTH_JOB are private VM memory, never loaded/saved from state.json.
+let SESSION = {subject:"", credential_epoch:0, expires_at:0}
+let AUTH_JOB = nil
+let AUTH_STATUS = "请登录；身份不可用时禁止业务写入"
+let AUTH_RETRY_AT = 0
+let IDENTITIES = []
+fn sessionActor(){ return SESSION.subject }
+fn loadViewState(){
+    let raw=nil
+    try { raw=fs.read("state.json").parse_json() } catch { return false }
+    if raw == nil { return false }
+    raw.actor=nil
+    STATE=raw
+    return true
+}
+fn loadIdentities(){
+    // Clear BEFORE reading: malformed/missing authority must never keep a cached grant.
+    IDENTITIES = []
+    let raw = nil
+    try { raw = fs.read("identity/accounts.json").parse_json() } catch { return false }
+    if raw == nil { return false }
+    let valid=false
+    try {
+        if raw.schema != 2 || raw.registry_kind != "local_accounts" { return false }
+        if raw.accounts == nil { return false }
+        if raw.accounts.len() != 5 { return false }
+        for i in 0..5 {
+            let x=raw.accounts[i]
+            if x.id == nil || x.id == "" { return false }
+            for j in 0..i { if raw.accounts[j].id == x.id { return false } }
+        }
+        valid=true
+    } catch { valid=false }
+    if !valid { return false }
+    IDENTITIES = raw.accounts
+    return true
+}
+fn identityById(id){
+    if id == "" || id == nil { return nil }
+    for x in IDENTITIES { if x.id == id { return x } }
+    return nil
+}
+fn accountActive(x){
+    if x == nil { return false }
+    let active = false
+    try {
+        if x.enabled != true { return false }
+        if x.revoked_at == nil || x.expires_at == nil || x.credential_epoch == nil { return false }
+        if x.credential_epoch < 1 { return false }
+        if x.revoked_at != 0 { return false }
+        if x.expires_at <= nowMs() { return false }
+        if x.roles == nil || x.skills == nil || x.name == nil { return false }
+        if x.kdf == nil { return false }
+        if x.kdf.scheme != "pbkdf2-sha256-token-v1" || x.kdf.iterations != AUTH_ROUNDS { return false }
+        if authUnhex(x.kdf.salt,16) == nil || authUnhex(x.kdf.hash,32) == nil { return false }
+        active = true
+    } catch { active = false }
+    return active
+}
+fn identityActive(id){
+    if id == "" || id != SESSION.subject { return false }
+    if SESSION.expires_at <= nowMs() { return false }
+    if !loadIdentities() { return false }
+    let x = identityById(id)
+    if !accountActive(x) { return false }
+    return x.credential_epoch == SESSION.credential_epoch
+}
+fn activeAccount(id){
+    if !loadIdentities() { return nil }
+    let x=identityById(id)
+    if !accountActive(x) { return nil }
+    return {id:x.id,name:x.name,roles:x.roles,skills:x.skills}
+}
+fn accountDirectory(){
+    if !identityActive(sessionActor()) { return [] }
+    let out=[]
+    for x in IDENTITIES {
+        if accountActive(x) { out.push({id:x.id,name:x.name,roles:x.roles,skills:x.skills}) }
+    }
+    return out
+}
+fn authLogout(){
+    SESSION = {subject:"",credential_epoch:0,expires_at:0}
+    AUTH_JOB=nil
+    AUTH_STATUS="已退出；请重新登录"
+    // Neither credentials nor session survive restart.
+}
+fn authBegin(id, token){
+    authLogout()
+    if nowMs() < AUTH_RETRY_AT { AUTH_STATUS="请稍后重试"; return false }
+    AUTH_RETRY_AT=nowMs()+2000
+    if !loadIdentities() { AUTH_STATUS="账号表不可用；禁止写入"; return false }
+    let x=identityById(id)
+    if !accountActive(x) { AUTH_STATUS="账号或凭据无效"; return false }
+    let job=authKdfStart(token,x.kdf.salt)
+    if job == nil { AUTH_STATUS="账号或凭据无效"; return false }
+    job.subject=x.id
+    job.credential_epoch=x.credential_epoch
+    job.expected_hash=x.kdf.hash
+    job.expected_salt=x.kdf.salt
+    job.started_at=nowMs()
+    AUTH_JOB=job
+    AUTH_STATUS="正在核验凭据；尚未建立会话"
+    return true
+}
+fn authStep(){
+    if AUTH_JOB == nil { return false }
+    if nowMs()-AUTH_JOB.started_at > 180000 { authLogout(); AUTH_STATUS="登录核验超时"; return false }
+    // One PBKDF2 round per callback keeps the 200000 instruction entry cap.
+    if AUTH_JOB.round < AUTH_ROUNDS { authKdfRound(AUTH_JOB); return false }
+    let job=AUTH_JOB
+    AUTH_JOB=nil
+    if !authEqual(job.t,authUnhex(job.expected_hash,32)) { AUTH_STATUS="账号或凭据无效"; return false }
+    if !loadIdentities() { AUTH_STATUS="账号表不可用"; return false }
+    let x=identityById(job.subject)
+    if !accountActive(x) { AUTH_STATUS="账号或凭据无效"; return false }
+    if x.credential_epoch != job.credential_epoch || x.kdf.hash != job.expected_hash || x.kdf.salt != job.expected_salt {
+        AUTH_STATUS="凭据已更新；请重新登录"; return false
+    }
+    // The subject is set ONLY after credential verification, from the authority record.
+    SESSION={subject:x.id,credential_epoch:x.credential_epoch,expires_at:nowMs()+28800000}
+    let u={id:x.id,name:x.name,roles:x.roles,skills:x.skills}
+    if !hasProjectRole(u,STATE.project) {
+        if hasProjectRole(u,"prj-A") { STATE.project="prj-A" }
+        else { if hasProjectRole(u,"prj-B") { STATE.project="prj-B" } }
+    }
+    AUTH_STATUS="已登录："+x.name
+    return true
+}
+fn getMe(){
+    if !identityActive(sessionActor()) { return {id:"",name:"未登录或身份已失效",roles:{},skills:[]} }
+    let x=identityById(sessionActor())
+    return {id:x.id,name:x.name,roles:x.roles,skills:x.skills}
+}
+fn hasProjectRole(u,project){
+    return hasRole(u,project,"REPORTER") || hasRole(u,project,"TECHNICIAN") || hasRole(u,project,"MANAGER")
+}
+fn authorizeTask(t){
+    if t == nil { return false }
+    let u=getMe()
+    if u.id == "" || !hasProjectRole(u,t.project) { return false }
+    return visible(t,u)
+}
+fn authorizeCommand(cmd,t,params){
+    if !authorizeTask(t) { return false }
+    let u=getMe()
+    if cmd == "confirmDraft" { return isReporter(t,u) && hasRole(u,t.project,"REPORTER") }
+    if cmd == "acceptTask" { return hasRole(u,t.project,"TECHNICIAN") && skillOk(u,t.category) }
+    if cmd == "assignTask" || cmd == "reassign" {
+        if !isManager(t,u) { return false }
+        let id=""
+        if cmd == "assignTask" { id=params.assignee }
+        if cmd == "reassign" { id=params.new_assignee }
+        if id == nil { return false }
+        let target=activeAccount(id)
+        if target == nil { return false }
+        return hasRole(target,t.project,"TECHNICIAN") && skillOk(target,t.category)
+    }
+    if cmd == "confirmAppointment" || cmd == "rejectAppointment" {
+        return isReporter(t,u) && hasRole(u,t.project,"REPORTER")
+    }
+    if cmd == "acceptCompletion" || cmd == "rejectCompletion" {
+        return !isAssignee(t,u) && ((isReporter(t,u) && hasRole(u,t.project,"REPORTER")) || isManager(t,u))
+    }
+    if cmd == "cancel" { return isReporter(t,u) || isManager(t,u) }
+    if cmd == "togglePin" { return true }
+    if cmd == "bindAsset" || cmd == "unbindAsset" || cmd == "cancelAppointment" || cmd == "rescheduleAppointment" {
+        return isManager(t,u) || (isAssignee(t,u) && hasRole(u,t.project,"TECHNICIAN"))
+    }
+    if cmd == "proposeAppointment" || cmd == "startProgress" || cmd == "recordProgress" || cmd == "submitCompletion" || cmd == "addEvidence" || cmd == "quarantineEvidence" {
+        return isAssignee(t,u) && hasRole(u,t.project,"TECHNICIAN")
+    }
+    return false
+}
+// IDENTITY_AUTH_END

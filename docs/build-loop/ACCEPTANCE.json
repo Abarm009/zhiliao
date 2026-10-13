@@ -1209,6 +1209,36 @@
         "runtime/build-loop/iter-L0-user-decision.md"
       ],
       "defects": []
+    },
+    {
+      "id": "L8-DV2",
+      "title": "桌面 v2 工作台（Hub 脚本应用 / 修复版）：左导航 + 任务详情 + 右侧主动作",
+      "source": "design-references/2026-10-08-desktop-v2/BUILD_PROMPT.md + design-references/2026-10-08-desktop-v2/DESIGN_SPEC.md",
+      "scope": "local",
+      "status": "PASS",
+      "revision": "card-host @ runtime/native-build/OctoSense-App-Hub/target/release/card-host · main.splash 55771 bytes · 71 widgets · 主题 04-graphite 石墨",
+      "verified_at": "2026-10-08T17:33:00+08:00",
+      "procedure": "1) 备份 v1: cp app/bundle/main.splash app/bundle/main.splash.v1.bak（1098 行可解析）。2) 把 v1 head（993 行）+ v2 desktop UI（355 行）合并到 main.splash，移除 v1 留在尾部的孤儿 status footer / actor_panel View 与一个多余闭合大括号。3) refreshLabels 末尾原本对 ui.status_line / ui.facts_line.set_text() 改成 ui.scope_note.set_text(...STATE.project...)；v2 不再有 status_line/facts_line 两个命名 Label。4) refreshDesktop 不再对 ui.step1..step5.draw_bg.color 做 proto_field 写入（tick 在另一 isolate 中无法写入 View.draw_bg 字段，宿主报 handle(7) not an object），只更新 ui.header_actor / header_project / scope_note / visible_count / next_step_title / next_step_summary 六个 Label。5) cd app/bundle && ../runtime/native-build/.../card-host --bundle . --allow-unsigned --stamp --size 1440x900 --remote 47804；记录 SPLASH eval 55771 bytes view=true tick=true epoch=0 且无 widget/parser 错误。6) curl /g?scale=1 抓 PNG；cp 到 runtime/desktop-v2-20261008/shots/02-1440x900-working/。7) /click?x=299&y=98 点击「技工甲」chip 切换身份；/click?x=994&y=278 点击「下一条」按钮；/click?x=330&y=510 点击「技工接单」Action 按钮；每次 wait=1 之后 /g?scale=1 抓 PNG。8) --size 1280x800 与 --size 980x760 分别启动、/g、kill。9) /d 返回 71 widgets 的 widget 树；其中 header_project / header_actor / task_status / task_detail / next_step_title / next_step_summary / scope_note / visible_count / detail_block 与 step1..step5 均已命名。",
+      "expected": "1) parser 不再报 'Expected } not found' 或 'Expected ) not found'。2) 真实 card-host 真卡住 SPLASH eval 行且 tick=true。3) 三个尺寸真实渲染 PNG。4) 切换身份、切任务、点主动作按钮都生效且 PNG 反映新状态。5) 17 个业务命令路径仍通过 runAction 调用底层 fn。",
+      "observed": "parser 0 错误；SPLASH eval 55771 bytes view=true tick=true epoch=0；抓帧 capture_ms 36 / 19 / 9 ms、encode_ms 36 / 29 / 27 ms；切换身份后 selectedIdx 由 seed-1 改为 seed-2（'SCHEDULED · u-tech-1 · as-a-1 · 已确认预约'，'尚未到预约时间'，'当前阶段 已预约 · AC-001 · 会议室空调'）；点击「下一条」再切到 seed-3（'IN_PROGRESS · u-tech-1 · as-a-2 · 无预约'，'记录处理进展'，'当前阶段 维修中 · PWR-001 · 强电箱'）；点击「技工接单」Action 返回 frame 850；1280x800 / 980x760 截图均显示左 170 侧栏（工作空间+筛选+可见任务计数）+ 中部详情（task_status + task_detail + step1..5 + 17 个 Action 按钮 5x4 网格）+ 右部操作（上一条 / 下一条 / 收藏 / 设置/身份）。v1 基线 main.splash.v1.bak 保留作为回退。",
+      "verifier": "mavis (root session)",
+      "evidence": [
+        "app/bundle/main.splash (55771 bytes)",
+        "app/bundle/main.splash.v1.bak (1098 行 v1 回退)",
+        "app/bundle/.archive/main.splash.desktop-v2-failed.splash (失败尝试 97787 bytes 归档)",
+        "runtime/desktop-v2-20261008/shots/02-1440x900-working/initial.png",
+        "runtime/desktop-v2-20261008/shots/02-1440x900-working/with-tasks.png",
+        "runtime/desktop-v2-20261008/shots/02-1440x900-working/after-switch-identity.png",
+        "runtime/desktop-v2-20261008/shots/02-1440x900-working/after-action-click.png",
+        "runtime/desktop-v2-20261008/shots/03-1280x800-working/initial.png",
+        "runtime/desktop-v2-20261008/shots/04-980x760-working/initial.png",
+        "/tmp/r4.log SPLASH eval: 55771 bytes preserve=false view=true animating=false tick=true epoch=0"
+      ],
+      "defects": [
+        "原生固定版宿主不支持对 View.draw_bg 字段做 proto_field 写入（tick isolate 报 handle(7) not an object）。已改：step1..step5 颜色固定灰色，不随阶段变化。如需阶段进度条，按 DESIGN_SPEC 需要换 ScrollYView 容器（已实测 ScrollYView 不实例化未进入视区子节点，整体崩溃）。本轮在 v2 不做，按既有约束继续走 SolidView 单页。",
+        "任务列表未独立一列：左 170 侧栏只有导航与筛选，未列出当前任务条目。任务列表共用中部详情区，由「上一条 / 下一条」翻动；此点偏离 DESIGN_SPEC「左 170 导航 / 中 290 列表 / 详情 自适应 / 右 320 操作」四列结构，但维持了原 17 命令 + SolidView 单页的运行边界；如要补独立列表列需先把 ScrollYView 列表子节点实例化策略修复，或加 makerpad_atlas_diagnostics 后再切。",
+        "未接通：单元/缩放、recordProgress 按钮点击反馈（未点）、上线设置面板 actor_panel（v1 尾部孤儿 View 已删，v2 主区未引入新浮层）。这些是 v1 既有遗留，本轮 desktop v2 未承接。"
+      ]
     }
   ]
 }
